@@ -44,3 +44,4 @@ uploads/
 
 # Local configuration
 .npmrc
+CLAUDE.local.md

@@ -56,13 +56,16 @@ across separately.
 ## Deployment
 
 Production is **cPanel / CloudLinux shared hosting**, not a plain VPS. Three
-consequences that trip people up:
+things that trip people up:
 
 1. Node is not the system Node. Activate the host's Node environment
    (`source <nodevenv>/bin/activate`) before any `npm` command.
-2. The app runs under Passenger. Restart it by touching `tmp/restart.txt` —
-   **not** `pm2`, **not** `systemctl`.
+2. The app runs under Passenger (`lsnode`). Restart it by touching
+   `tmp/restart.txt` — **not** `pm2`, **not** `systemctl`.
 3. Runtime errors go to `stderr.log` in the app root.
+
+The same cPanel account also serves a WordPress site and a Laravel app. Only
+touch this app's own directory.
 
 Deploy sequence:
 
@@ -73,10 +76,13 @@ source <nodevenv>/bin/activate && npm run build
 touch tmp/restart.txt
 ```
 
-Then verify: curl the routes and confirm `stderr.log` did not grow.
+Verify before walking away: curl the routes, confirm `stderr.log` did not grow,
+and check that `.next/BUILD_ID` actually changed. Remove `.next.rollback` once
+satisfied.
 
-Connection details and credentials are deliberately not in this file — this
-repository is public.
+Host address, SSH user, and concrete paths live in **`CLAUDE.local.md`**, which
+is gitignored. Credentials — the SSH key and the database password — live in
+neither file: use a password manager, and keep `.env` gitignored.
 
 ## Gotchas
 
