@@ -13,3 +13,34 @@ nodevenv/
 *.xls
 uploads/
 server.backup.js
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Dependencies and build
+node_modules/
+.next/
+nodevenv/
+
+# Logs and backups
+*.log
+backups/
+*.backup.*
+*.backup
+family_update/
+family_update.zip
+
+# Database and uploaded files
+*.sqlite
+*.db
+public/uploads/
+uploads/
+
+# Local configuration
+.npmrc

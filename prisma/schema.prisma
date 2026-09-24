@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model AcademicYear {
+  id         Int          @id @default(autoincrement())
+  name       String       @unique
+  isActive   Boolean      @default(false)
+  Class      Class[]
+  Enrollment Enrollment[]
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  date      DateTime @db.Date
+  status    String
+  notes     String?  @db.Text
+  Student   Student  @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, date])
+}
+
+model Class {
+  id             Int          @id @default(autoincrement())
+  name           String
+  grade          String
+  shift          String?
+  capacity       Int?
+  academicYearId Int
+  AcademicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  Enrollment     Enrollment[]
+
+  @@index([academicYearId])
+}
+
+model Enrollment {
+  id             Int          @id @default(autoincrement())
+  studentId      Int
+  classId        Int
+  academicYearId Int
+  enrollmentDate DateTime     @default(now())
+  status         String       @default("ACTIVE")
+  tuitionFee     Decimal      @default(0.00) @db.Decimal(15, 2)
+  AcademicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  Class          Class        @relation(fields: [classId], references: [id])
+  Student        Student      @relation(fields: [studentId], references: [id])
+  Payment        Payment[]
+
+  @@unique([studentId, academicYearId])
+  @@index([academicYearId], map: "Enrollment_academicYearId_fkey")
+  @@index([classId])
+}
+
+model LoginAttempt {
+  id          Int       @id @default(autoincrement())
+  ipHash      String    @unique @db.Char(64)
+  attempts    Int       @default(0)
+  lockedUntil DateTime?
+  updatedAt   DateTime
+}
+
+model Parent {
+  id            Int             @id @default(autoincrement())
+  firstName     String
+  lastName      String
+  phone         String?
+  phone2        String?
+  address       String?         @db.Text
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime
+  StudentParent StudentParent[]
+}
+
+model Payment {
+  id           Int        @id @default(autoincrement())
+  enrollmentId Int
+  amount       Decimal    @db.Decimal(15, 2)
+  paymentDate  DateTime   @default(now())
+  paymentType  String?
+  receiptNo    String?    @unique
+  description  String?    @db.Text
+  createdAt    DateTime   @default(now())
+  Enrollment   Enrollment @relation(fields: [enrollmentId], references: [id])
+
+  @@index([enrollmentId])
+}
+
+model Session {
+  id        String   @id
+  userId    Int
+  tokenHash String   @unique @db.Char(64)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+model Student {
+  id             Int             @id @default(autoincrement())
+  studentCode    String          @unique
+  firstName      String
+  lastName       String
+  fatherName     String?
+  birthDate      DateTime?       @db.Date
+  gender         String?
+  nationalId     String?         @unique
+  phone          String?
+  address        String?         @db.Text
+  status         String          @default("ACTIVE")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime
+  emergencyPhone String?
+  notes          String?         @db.Text
+  photo          String?         @db.Text
+  Attendance     Attendance[]
+  Enrollment     Enrollment[]
+  StudentParent  StudentParent[]
+}
+
+model StudentParent {
+  studentId Int
+  parentId  Int
+  relation  String
+  Parent    Parent  @relation(fields: [parentId], references: [id])
+  Student   Student @relation(fields: [studentId], references: [id])
+
+  @@id([studentId, parentId])
+  @@index([parentId], map: "StudentParent_parentId_fkey")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique @db.VarChar(100)
+  passwordHash String    @db.VarChar(255)
+  fullName     String
+  role         User_role @default(REGISTRAR)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime
+  Session      Session[]
+}
+
+enum User_role {
+  ADMIN
+  DEPUTY
+  REGISTRAR
+}
