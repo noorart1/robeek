@@ -9,7 +9,6 @@ const columns = [
   { field: "studentCode", label: "رمز الطفل" },
   { field: "firstName", label: "الاسم" },
   { field: "lastName", label: "اللقب" },
-  { field: "fatherName", label: "اسم الأب (قديم)" },
   { field: "father", label: "الأب", kind: "parent", relation: "FATHER" },
   { field: "mother", label: "الأم", kind: "parent", relation: "MOTHER" },
   { field: "nationalId", label: "الرقم الوطني" },

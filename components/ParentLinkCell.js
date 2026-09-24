@@ -4,6 +4,7 @@ import EditableCell from "./EditableCell";
 
 export default function ParentLinkCell({studentId, relation, parent, onChanged, onEditingChange}) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState("new");
   const [list, setList] = useState([]);
   const [selected, setSelected] = useState("");
@@ -32,17 +33,29 @@ export default function ParentLinkCell({studentId, relation, parent, onChanged, 
       close(); await onChanged();
     } catch(e) {setError(e.message)} finally {setBusy(false)}
   }
-  if (parent) return (
-    <div style={{minWidth:210}}>
-      <div style={{fontWeight:600}}>{parent.firstName} {parent.lastName}</div>
-      {[["firstName","الاسم"],["lastName","اللقب"],["phone","الهاتف"],["phone2","هاتف بديل"]].map(([field,label]) => (
-        <div key={field} style={{display:"flex",alignItems:"center",gap:5}}>
-          <small style={{minWidth:65}}>{label}:</small>
-          <EditableCell parentId={parent.id} field={field} value={parent[field] || ""} updatedAt={parent.updatedAt} onSaved={onChanged} onEditingChange={onEditingChange}/>
-        </div>
-      ))}
-    </div>
-  );
+  if (parent) {
+    const fullName = [parent.firstName, parent.lastName].filter(Boolean).join(" ");
+    return (
+      <div style={{minWidth:170}}>
+        <button type="button" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}
+          style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:0,background:"none",border:"none",font:"inherit",color:"inherit",textAlign:"right",cursor:"pointer"}}>
+          <span style={{fontWeight:600}}>{fullName || "—"}</span>
+          {!expanded && parent.phone && <small style={{color:"#64748b"}}>{parent.phone}</small>}
+          <span style={{marginInlineStart:"auto",color:"#2563eb",fontSize:11}}>{expanded ? "▲" : "▼"}</span>
+        </button>
+        {expanded && (
+          <div style={{marginTop:6}}>
+            {[["firstName","الاسم"],["lastName","اللقب"],["phone","الهاتف"],["phone2","هاتف بديل"]].map(([field,label]) => (
+              <div key={field} style={{display:"flex",alignItems:"center",gap:5}}>
+                <small style={{minWidth:65}}>{label}:</small>
+                <EditableCell parentId={parent.id} field={field} value={parent[field] || ""} updatedAt={parent.updatedAt} onSaved={onChanged} onEditingChange={onEditingChange}/>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
   if (!open) return <button type="button" onClick={()=>{setOpen(true);onEditingChange?.(true)}}>+ {relation === "FATHER" ? "إضافة الأب" : "إضافة الأم"}</button>;
   return <form onSubmit={submit} style={{minWidth:230,display:"grid",gap:6}}>
     <select aria-label="طريقة الربط" value={mode} onChange={e=>{setMode(e.target.value);setError("")}}>
