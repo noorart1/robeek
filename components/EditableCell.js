@@ -15,6 +15,13 @@ const options = {
   ]
 };
 
+const DEFAULT_WIDTH = 160;
+
+const widths = {
+  address: 220,
+  notes: 220
+};
+
 const limits = {
   studentCode: 50,
   firstName: 100,
@@ -168,11 +175,17 @@ export default function EditableCell({
   }
 
   if (!editing) {
+    const shown = display(value, type);
+
     return (
       <button
         type="button"
         onClick={startEditing}
+        title={shown === "—" ? undefined : shown}
         style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
           background: "transparent",
           border: "none",
           cursor: "pointer",
@@ -180,10 +193,24 @@ export default function EditableCell({
           textAlign: "right",
           width: "100%",
           minWidth: "110px",
-          fontFamily: "inherit"
+          maxWidth: `${widths[field] || DEFAULT_WIDTH}px`,
+          fontFamily: "inherit",
+          fontSize: "inherit"
         }}
       >
-        {display(value, type)} ✎
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            textAlign: "right"
+          }}
+        >
+          {shown}
+        </span>
+        <span style={{ flexShrink: 0, color: "#94a3b8" }}>✎</span>
       </button>
     );
   }
