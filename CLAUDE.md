@@ -39,6 +39,20 @@ and leave production with no dependencies.
 A proper fix, if ever wanted: `git rm --cached node_modules`, add it to
 `.gitignore`, and leave the symlink untracked on the server.
 
+### Setting up a fresh clone on Windows
+
+Git on Windows defaults to `core.symlinks=false`, so cloning writes
+`node_modules` as a small **text file** containing the symlink target rather
+than a directory. `npm install` then fails or behaves strangely. Delete it
+first:
+
+```
+rm -f node_modules && npm install
+```
+
+`.env` is gitignored, so a fresh clone has no database configuration — copy it
+across separately.
+
 ## Deployment
 
 Production is **cPanel / CloudLinux shared hosting**, not a plain VPS. Three
