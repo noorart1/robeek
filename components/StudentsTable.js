@@ -4,12 +4,13 @@
 import { useEffect, useRef, useState } from "react";
 import EditableCell from "./EditableCell";
 import ParentLinkCell from "./ParentLinkCell";
+import StudentDialog from "./StudentDialog";
+import StudentPhoto from "./StudentPhoto";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
+import { formatDate, matchesSearch } from "../lib/arabic";
 
 const columns = [
   { field: "studentCode", label: "رمز الطفل" },
-  { field: "firstName", label: "الاسم" },
-  { field: "lastName", label: "اللقب" },
   { field: "father", label: "الأب", kind: "parent", relation: "FATHER" },
   { field: "mother", label: "الأم", kind: "parent", relation: "MOTHER" },
   { field: "nationalId", label: "الرقم الوطني" },
@@ -32,6 +33,11 @@ function displayValue(student, field) {
   return value ?? "";
 }
 
+// Widths of the two columns pinned to the right edge while the table
+// scrolls sideways; the second one is offset by the first.
+const INDEX_WIDTH = 44;
+const NAME_WIDTH = 230;
+
 export default function StudentsTable() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +45,7 @@ export default function StudentsTable() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [lastSync, setLastSync] = useState(null);
+  const [dialogId, setDialogId] = useState(null);
 
   const [form, setForm] = useState({
     studentCode: "",
@@ -211,6 +218,9 @@ export default function StudentsTable() {
         lastName: ""
       });
 
+      // Straight into the full form to fill in the rest of the details.
+      setDialogId(data.student.id);
+
       setLastSync(new Date());
     } catch (err) {
       setError(err.message);
@@ -235,13 +245,23 @@ export default function StudentsTable() {
   }
 
   const filteredStudents = students.filter((student) => {
-    const text = columns
-      .map(({ field, kind }) => kind === "parent" ? [student[field]?.firstName, student[field]?.lastName, student[field]?.phone].join(" ") : displayValue(student, field))
-      .join(" ")
-      .toLowerCase();
+    const text = [
+      student.firstName,
+      student.lastName,
+      ...columns.map(({ field, kind }) =>
+        kind === "parent"
+          ? [student[field]?.firstName, student[field]?.lastName, student[field]?.phone].join(" ")
+          : field === "birthDate"
+            ? formatDate(student[field])
+            : displayValue(student, field)
+      )
+    ].join(" ");
 
-    return text.includes(search.trim().toLowerCase());
+    return matchesSearch(text, search);
   });
+
+  const dialogStudent =
+    dialogId && students.find((student) => student.id === dialogId);
 
   const cellStyle = {
     borderBottom: "1px solid #e2e8f0",
@@ -253,9 +273,38 @@ export default function StudentsTable() {
 
   const headerStyle = {
     ...cellStyle,
+    position: "sticky",
+    top: 0,
+    zIndex: 2,
     backgroundColor: "#eff6ff",
     color: "#1e40af",
     fontWeight: "bold"
+  };
+
+  const pinned = (right, width) => ({
+    position: "sticky",
+    right,
+    width,
+    minWidth: width,
+    maxWidth: width,
+    boxSizing: "border-box"
+  });
+
+  const indexCellStyle = {
+    ...cellStyle,
+    ...pinned(0, INDEX_WIDTH),
+    zIndex: 1,
+    backgroundColor: "#ffffff",
+    color: "#64748b"
+  };
+
+  const nameCellStyle = {
+    ...cellStyle,
+    ...pinned(INDEX_WIDTH, NAME_WIDTH),
+    zIndex: 1,
+    padding: "6px 10px",
+    backgroundColor: "#ffffff",
+    boxShadow: "-3px 0 4px -2px rgba(15, 23, 42, 0.12)"
   };
 
   return (
@@ -332,7 +381,7 @@ export default function StudentsTable() {
 
       <input
         aria-label="البحث عن طفل"
-        placeholder="البحث عن طفل..."
+        placeholder="البحث بالاسم أو الرمز أو الهاتف..."
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         style={{
@@ -365,7 +414,8 @@ export default function StudentsTable() {
         <div
           style={{
             width: "100%",
-            overflowX: "auto",
+            maxHeight: "calc(100vh - 150px)",
+            overflow: "auto",
             border: "1px solid #e2e8f0",
             borderRadius: "10px"
           }}
@@ -380,7 +430,8 @@ export default function StudentsTable() {
           >
             <thead>
               <tr>
-                <th style={headerStyle}>ت</th>
+                <th style={{ ...headerStyle, ...pinned(0, INDEX_WIDTH), zIndex: 3 }}>ت</th>
+                <th style={{ ...headerStyle, ...pinned(INDEX_WIDTH, NAME_WIDTH), zIndex: 3 }}>الطفل</th>
 
                 {columns.map((column) => (
                   <th
@@ -396,7 +447,44 @@ export default function StudentsTable() {
             <tbody>
               {filteredStudents.map((student, index) => (
                 <tr key={student.id}>
-                  <td style={cellStyle}>{index + 1}</td>
+                  <td style={indexCellStyle}>{index + 1}</td>
+
+                  <td style={nameCellStyle}>
+                    <button
+                      type="button"
+                      onClick={() => setDialogId(student.id)}
+                      title="تعديل جميع بيانات الطفل"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        padding: 0,
+                        background: "none",
+                        border: "none",
+                        font: "inherit",
+                        color: "inherit",
+                        textAlign: "right",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <StudentPhoto student={student} />
+                      <span
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          fontWeight: 600
+                        }}
+                      >
+                        {student.firstName} {student.lastName}
+                      </span>
+                      <span style={{ color: "#2563eb", fontSize: "13px" }}>
+                        تعديل
+                      </span>
+                    </button>
+                  </td>
 
                   {columns.map((column) => (
                     <td
@@ -443,6 +531,17 @@ export default function StudentsTable() {
       <p style={{ color: "#64748b" }}>
         عدد الأطفال المعروضين: {filteredStudents.length}
       </p>
+
+      {dialogStudent && (
+        <StudentDialog
+          key={dialogStudent.id}
+          student={dialogStudent}
+          onClose={() => setDialogId(null)}
+          onSaved={handleStudentSaved}
+          onFamilyChanged={reloadAfterFamilyChange}
+          onEditingChange={editingChanged}
+        />
+      )}
     </main>
   );
 }

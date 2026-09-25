@@ -124,6 +124,118 @@ function parseBirthDate(value) {
   return date;
 }
 
+// Validate one field; returns { value } ready to store, or { error }
+
+function validateField(field, value) {
+  // بررسی فیلد انتخاب‌شده
+
+  if (
+    typeof field !== "string" ||
+    !editableFields.includes(field)
+  ) {
+    return { error: "الحقل المحدد غير قابل للتعديل." };
+  }
+
+  // بررسی مقدار واردشده
+
+  if (
+    typeof value !== "string" ||
+    value.length > fieldLimits[field]
+  ) {
+    return { error: "القيمة المدخلة غير صالحة." };
+  }
+
+  const trimmedValue = digitFields.includes(field)
+    ? toWesternDigits(value.trim())
+    : value.trim();
+
+  // بررسی فیلدهای الزامی
+
+  if (
+    requiredFields.includes(field) &&
+    !trimmedValue
+  ) {
+    return { error: "هذا الحقل مطلوب ولا يمكن تركه فارغاً." };
+  }
+
+  // آماده‌سازی مقدار جدید
+
+  let newValue = trimmedValue;
+
+  // تاریخ تولد میلادی
+
+  if (field === "birthDate") {
+    if (!trimmedValue) {
+      newValue = null;
+    } else {
+      const parsedDate = parseBirthDate(
+        trimmedValue
+      );
+
+      if (!parsedDate) {
+        return { error: "يرجى إدخال تاريخ ميلاد ميلادي صحيح." };
+      }
+
+      newValue = parsedDate;
+    }
+  }
+
+  // شماره ملی عراق
+
+  if (
+    field === "nationalId" &&
+    trimmedValue
+  ) {
+    if (!/^[0-9]{1,30}$/.test(trimmedValue)) {
+      return { error: "يرجى إدخال الرقم الوطني بالأرقام فقط." };
+    }
+  }
+
+  // شماره‌های تماس
+
+  if (
+    ["phone", "emergencyPhone"].includes(field) &&
+    trimmedValue
+  ) {
+    if (
+      !/^[+]?[0-9\s()-]{7,30}$/.test(trimmedValue)
+    ) {
+      return { error: "يرجى إدخال رقم هاتف صحيح." };
+    }
+  }
+
+  // جنسیت کودک
+
+  if (field === "gender" && trimmedValue) {
+    if (
+      !["MALE", "FEMALE"].includes(trimmedValue)
+    ) {
+      return { error: "يرجى اختيار الجنس من القائمة." };
+    }
+  }
+
+  // وضعیت کودک
+
+  if (field === "status") {
+    if (
+      !["ACTIVE", "INACTIVE"].includes(trimmedValue)
+    ) {
+      return { error: "حالة الطفل غير صالحة." };
+    }
+  }
+
+  // تبدیل فیلدهای اختیاری خالی به null
+
+  if (
+    nullableFields.includes(field) &&
+    !trimmedValue
+  ) {
+    newValue = null;
+  }
+
+  return { value: newValue };
+}
+
 // ویرایش اطلاعات کودک
 
 export async function PATCH(request, { params }) {
@@ -180,46 +292,38 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    const { field, value, updatedAt } = body;
+    const { updatedAt } = body;
 
-    // بررسی فیلد انتخاب‌شده
+    // A cell edit sends { field, value }; the full edit dialog sends
+    // { fields: { name: value, ... } }. Both are validated identically
+    // and saved in one conditional update.
 
-    if (
-      typeof field !== "string" ||
-      !editableFields.includes(field)
-    ) {
+    const changes =
+      body.fields &&
+      typeof body.fields === "object" &&
+      !Array.isArray(body.fields)
+        ? body.fields
+        : { [body.field]: body.value };
+
+    const entries = Object.entries(changes);
+
+    if (entries.length === 0) {
       return errorResponse(
-        "الحقل المحدد غير قابل للتعديل.",
+        "لا توجد تغييرات للحفظ.",
         400
       );
     }
 
-    // بررسی مقدار واردشده
+    const data = {};
 
-    if (
-      typeof value !== "string" ||
-      value.length > fieldLimits[field]
-    ) {
-      return errorResponse(
-        "القيمة المدخلة غير صالحة.",
-        400
-      );
-    }
+    for (const [field, value] of entries) {
+      const checked = validateField(field, value);
 
-    const trimmedValue = digitFields.includes(field)
-      ? toWesternDigits(value.trim())
-      : value.trim();
+      if (checked.error) {
+        return errorResponse(checked.error, 400, { field });
+      }
 
-    // بررسی فیلدهای الزامی
-
-    if (
-      requiredFields.includes(field) &&
-      !trimmedValue
-    ) {
-      return errorResponse(
-        "هذا الحقل مطلوب ولا يمكن تركه فارغاً.",
-        400
-      );
+      data[field] = checked.value;
     }
 
     // بررسی نسخه اطلاعات برای جلوگیری از تداخل
@@ -236,96 +340,6 @@ export async function PATCH(request, { params }) {
 
     const expectedUpdatedAt = new Date(updatedAt);
 
-    // آماده‌سازی مقدار جدید
-
-    let newValue = trimmedValue;
-
-    // تاریخ تولد میلادی
-
-    if (field === "birthDate") {
-      if (!trimmedValue) {
-        newValue = null;
-      } else {
-        const parsedDate = parseBirthDate(
-          trimmedValue
-        );
-
-        if (!parsedDate) {
-          return errorResponse(
-            "يرجى إدخال تاريخ ميلاد ميلادي صحيح.",
-            400
-          );
-        }
-
-        newValue = parsedDate;
-      }
-    }
-
-    // شماره ملی عراق
-
-    if (
-      field === "nationalId" &&
-      trimmedValue
-    ) {
-      if (!/^[0-9]{1,30}$/.test(trimmedValue)) {
-        return errorResponse(
-          "يرجى إدخال الرقم الوطني بالأرقام فقط.",
-          400
-        );
-      }
-    }
-
-    // شماره‌های تماس
-
-    if (
-      ["phone", "emergencyPhone"].includes(field) &&
-      trimmedValue
-    ) {
-      if (
-        !/^[+]?[0-9\s()-]{7,30}$/.test(trimmedValue)
-      ) {
-        return errorResponse(
-          "يرجى إدخال رقم هاتف صحيح.",
-          400
-        );
-      }
-    }
-
-    // جنسیت کودک
-
-    if (field === "gender" && trimmedValue) {
-      if (
-        !["MALE", "FEMALE"].includes(trimmedValue)
-      ) {
-        return errorResponse(
-          "يرجى اختيار الجنس من القائمة.",
-          400
-        );
-      }
-    }
-
-    // وضعیت کودک
-
-    if (field === "status") {
-      if (
-        !["ACTIVE", "INACTIVE"].includes(trimmedValue)
-      ) {
-        return errorResponse(
-          "حالة الطفل غير صالحة.",
-          400
-        );
-      }
-    }
-
-    // تبدیل فیلدهای اختیاری خالی به null
-
-    if (
-      nullableFields.includes(field) &&
-      !trimmedValue
-    ) {
-      newValue = null;
-    }
-
     // ذخیره مشروط اطلاعات
 
     const result = await prisma.student.updateMany({
@@ -334,7 +348,7 @@ export async function PATCH(request, { params }) {
         updatedAt: expectedUpdatedAt
       },
       data: {
-        [field]: newValue,
+        ...data,
         updatedAt: new Date()
       }
     });

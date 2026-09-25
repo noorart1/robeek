@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
+import { formatDate } from "../lib/arabic";
 
 const options = {
   gender: [
@@ -55,6 +56,10 @@ function display(value, type) {
 
   if (type === "status") {
     return value === "ACTIVE" ? "نشط" : "غير نشط";
+  }
+
+  if (type === "date") {
+    return formatDate(value) || "—";
   }
 
   return value || "—";
@@ -172,6 +177,20 @@ export default function EditableCell({
     }
   }
 
+  // Enter saves and Escape cancels; in multi-line fields Shift+Enter
+  // still inserts a new line.
+  function handleKeyDown(event) {
+    if (event.nativeEvent.isComposing) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEditing();
+    } else if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      save();
+    }
+  }
+
   function refreshEditVersion() {
     setDraft(normalize(value, type));
     setEditVersion(updatedAt);
@@ -240,6 +259,7 @@ export default function EditableCell({
             setDraft(event.target.value)
           }
           disabled={saving || conflict}
+          onKeyDown={handleKeyDown}
           autoFocus
           style={inputStyle}
         >
@@ -260,6 +280,7 @@ export default function EditableCell({
           }
           disabled={saving || conflict}
           maxLength={limits[field]}
+          onKeyDown={handleKeyDown}
           autoFocus
           rows={3}
           style={inputStyle}
@@ -273,6 +294,7 @@ export default function EditableCell({
           }
           disabled={saving || conflict}
           maxLength={limits[field]}
+          onKeyDown={handleKeyDown}
           autoFocus
           dir={
             type === "date" ||

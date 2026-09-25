@@ -96,6 +96,16 @@ neither file: use a password manager, and keep `.env` gitignored.
 - `.env` is gitignored and has never been committed. Keep it that way.
 - Several `*.backup.js` files and `*.before-*-fix.js` files sit beside their
   originals as manual snapshots. They are untracked scratch, not live code.
+- **`updatedAt` has no `@updatedAt` in the schema** (it was introspected with
+  `prisma db pull`), so Prisma never fills it in. Every `create` and every
+  `update` of a model with that column must set `updatedAt: new Date()`
+  explicitly — omitting it on create throws, and omitting it on update
+  silently breaks the 409 conflict check.
+- **Student photos are files in `uploads/students/`**, not database rows. The
+  directory is gitignored, sits outside `public/`, and is served only through
+  the authenticated `/api/students/[id]/photo` route; the `photo` column holds
+  just the file name. Back it up together with the database — a DB dump alone
+  loses every photo — and never move it under `public/`.
 
 ## Table UI conventions (`components/`)
 
@@ -114,3 +124,16 @@ Editing is inline and optimistic-free: each cell PATCHes a single field and
 sends the row's `updatedAt` for conflict detection (HTTP 409 →
 `EDIT_CONFLICT`). The table polls every 10s but pauses while any cell is being
 edited — preserve that behaviour when touching `StudentsTable.js`.
+
+- **Enter saves, Escape cancels** in every editor; Shift+Enter is a new line
+  in `address`/`notes`.
+- The first two columns (row number, and photo + name) are pinned with
+  `position: sticky`; their widths are constants in `StudentsTable.js`, and
+  the second column's `right` offset depends on the first.
+- Names are edited in `StudentDialog` (click the name), which edits every
+  field at once by PATCHing `{ fields: {...}, updatedAt }`. The server
+  validates each field with the same `validateField` as single-cell edits and
+  saves all of them in one conditional update.
+- Search goes through `matchesSearch` in `lib/arabic.js`, which folds
+  أ/إ/آ→ا, ة→ه, ى/ی→ي, tashkeel, and Arabic-Indic digits. Use it for any new
+  search box.

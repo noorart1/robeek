@@ -343,3 +343,65 @@ export async function POST(request, { params }) {
     );
   }
 }
+
+// Unlink a father or mother from the child (DELETE ?relation=FATHER).
+// Only the link is removed; the parent record is kept because it may be
+// linked to siblings.
+
+export async function DELETE(request, { params }) {
+  try {
+    if (!(await checkAdmin())) {
+      return errorResponse(
+        "ليس لديك صلاحية الوصول.",
+        401
+      );
+    }
+
+    const studentId = await getStudentId(params);
+
+    if (!studentId) {
+      return errorResponse(
+        "معرّف الطفل غير صالح.",
+        400
+      );
+    }
+
+    const relation = new URL(request.url)
+      .searchParams.get("relation");
+
+    if (!["FATHER", "MOTHER"].includes(relation)) {
+      return errorResponse(
+        "يرجى تحديد صلة القرابة.",
+        400
+      );
+    }
+
+    const result = await prisma.studentParent.deleteMany({
+      where: { studentId, relation }
+    });
+
+    if (result.count === 0) {
+      return errorResponse(
+        "لا يوجد ولي أمر مرتبط بهذه الصفة.",
+        404
+      );
+    }
+
+    return Response.json(
+      { success: true },
+      {
+        headers: {
+          "Cache-Control": "no-store"
+        }
+      }
+    );
+
+  } catch (error) {
+    console.error("Parents DELETE error:", error);
+
+    return errorResponse(
+      "حدث خطأ أثناء إلغاء ربط ولي الأمر.",
+      500
+    );
+  }
+}
