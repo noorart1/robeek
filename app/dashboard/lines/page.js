@@ -2,8 +2,9 @@
 import { redirect } from "next/navigation";
 import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
-import { SHIFTS, classLabel, fullName } from "../../../lib/labels";
+import { classLabel, fullName } from "../../../lib/labels";
 import AppHeader from "../../../components/AppHeader";
+import { AddLine, LineHeader } from "../../../components/LineEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,14 @@ export default async function LinesPage() {
           {lines.length} خطوط — {riders} طفلاً مشتركاً. لتغيير خط الطفل افتح بياناته من صفحة الأطفال.
         </p>
 
+        <div style={{ marginBottom: "16px" }}>
+          <AddLine />
+        </div>
+
+        {lines.length === 0 && (
+          <p style={{ color: "#64748b" }}>لا توجد خطوط نقل بعد.</p>
+        )}
+
         <div
           style={{
             display: "grid",
@@ -79,22 +88,15 @@ export default async function LinesPage() {
               key={line.id}
               style={{ backgroundColor: "#ffffff", borderRadius: "12px", overflowX: "auto" }}
             >
-              <header
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  gap: "10px",
-                  flexWrap: "wrap",
-                  padding: "12px 14px",
-                  borderBottom: "2px solid #eff6ff"
+              <LineHeader
+                line={{
+                  id: line.id,
+                  name: line.name,
+                  driverPhone: line.driverPhone,
+                  shift: line.shift
                 }}
-              >
-                <strong style={{ fontSize: "17px", color: "#1e40af" }}>خط {line.name}</strong>
-                <span dir="ltr" style={{ color: "#475569" }}>{line.driverPhone}</span>
-                <span style={{ marginInlineStart: "auto", color: "#64748b" }}>
-                  {SHIFTS[line.shift]} — {line.Student.length} أطفال
-                </span>
-              </header>
+                riders={line.Student.length}
+              />
 
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                 <thead>
