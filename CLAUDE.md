@@ -57,30 +57,55 @@ across separately.
 
 ## Deployment
 
-Production is **cPanel / CloudLinux shared hosting**, not a plain VPS. Three
-things that trip people up:
+Production is **cPanel / CloudLinux shared hosting** behind **LiteSpeed**, not
+a plain VPS. Things that trip people up (all learned on the 2026-09-25 deploy):
 
 1. Node is not the system Node. Activate the host's Node environment
    (`source <nodevenv>/bin/activate`) before any `npm` command.
-2. The app runs under Passenger (`lsnode`). Restart it by touching
-   `tmp/restart.txt` — **not** `pm2`, **not** `systemctl`.
-3. Runtime errors go to `stderr.log` in the app root.
+2. The app runs under the CloudLinux Node.js Selector (Passenger). Restart
+   with `cloudlinux-selector restart --json --interpreter nodejs --app-root
+   school-app`. **Touching `tmp/restart.txt` did not restart it** — the old
+   build kept serving. Not `pm2`, not `systemctl`.
+3. **The server cannot `git pull`:** the GitHub repo is private and the host
+   has no credentials. Ship commits as a git bundle (below), or add a
+   read-only GitHub deploy key to the host.
+4. LiteSpeed caches responses that allow it. `next.config.js` opts the app
+   out (`X-LiteSpeed-Cache-Control: no-cache`); without that, prerendered
+   pages (`/`, `/login`) served the previous build after a deploy. Check with
+   `curl -sD- -o/dev/null https://…/login | grep -i x-litespeed`.
+5. Runtime errors go to `stderr.log` in the app root. The server clock is
+   Iraq time (+03), so cron times are Iraq times.
+6. Chain remote steps with `set -eo pipefail` — a `git pull | tail` once
+   hid a failed pull and the build carried on with the old code.
 
-The same cPanel account also serves a WordPress site and a Laravel app. Only
-touch this app's own directory.
+The same cPanel account also serves a WordPress site and a Laravel app (their
+cron jobs share the crontab). Only touch this app's own directory, and never
+wipe `~/lscache` — it is shared with WordPress.
 
 Deploy sequence:
 
 ```
-cp -a .next .next.rollback     # next build overwrites .next in place, on a live site
-git pull --ff-only origin main
-source <nodevenv>/bin/activate && npm run build
-touch tmp/restart.txt
+# local
+git bundle create robeek.bundle <server-HEAD>..main
+scp robeek.bundle <host>:~/
+
+# server
+set -eo pipefail
+cd ~/school-app && source <nodevenv>/bin/activate
+node scripts/backup.js                 # fresh DB + photo backup first
+cp -a .next .next.rollback             # next build overwrites .next in place
+git pull --ff-only ~/robeek.bundle main && rm ~/robeek.bundle
+# new files in prisma/manual-migrations/? apply them, then:
+npx prisma generate
+npm run build
+cloudlinux-selector restart --json --interpreter nodejs --app-root school-app
 ```
 
-Verify before walking away: curl the routes, confirm `stderr.log` did not grow,
-and check that `.next/BUILD_ID` actually changed. Remove `.next.rollback` once
-satisfied.
+Verify before walking away: `/login` must be the new build (e.g. `lang="ar"`
+and a `content-security-policy` header, no `x-powered-by`), `stderr.log` must
+not grow, and `.next/BUILD_ID` must have changed. Remove `.next.rollback` once
+satisfied. To roll back: restore `.next.rollback`, `git reset --hard` to the
+previous commit, and restore the DB dump if a migration ran.
 
 ### Backups
 
