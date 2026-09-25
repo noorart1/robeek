@@ -329,7 +329,8 @@ export async function POST(request) {
       data: {
         studentCode,
         firstName,
-        lastName
+        lastName,
+        updatedAt: new Date()
       },
 
       select: studentSelect
