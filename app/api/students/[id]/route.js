@@ -3,6 +3,7 @@ import prisma from "../../../../lib/prisma";
 import { getCurrentUser } from "../../../../lib/auth";
 import { toWesternDigits } from "../../../../lib/digits";
 import { loadStudent } from "../../../../lib/student-data";
+import { deletePhoto } from "../../../../lib/photos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -459,5 +460,78 @@ export async function PATCH(request, { params }) {
       "حدث خطأ أثناء حفظ بيانات الطفل.",
       500
     );
+  }
+}
+
+// حذف طفل نهائياً, with everything that only belongs to them: attendance,
+// payments, enrollments and the photo file. Parents are removed only when
+// no other child is linked to them, so siblings keep theirs.
+//
+// For a child who has left, the table's «غير نشط» status is the better
+// tool: it keeps the payment history the finance page reports on.
+
+export async function DELETE(request, { params }) {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user || user.role !== "ADMIN") {
+      return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    }
+
+    const { id } = await params;
+    const studentId = Number(id);
+
+    if (!Number.isSafeInteger(studentId) || studentId <= 0) {
+      return errorResponse("معرّف الطفل غير صالح.", 400);
+    }
+
+    const removed = await prisma.$transaction(async (tx) => {
+      const student = await tx.student.findUnique({
+        where: { id: studentId },
+        select: {
+          photo: true,
+          StudentParent: { select: { parentId: true } },
+          Enrollment: { select: { id: true } }
+        }
+      });
+
+      if (!student) return null;
+
+      const enrollmentIds = student.Enrollment.map((e) => e.id);
+      const parentIds = student.StudentParent.map((link) => link.parentId);
+
+      await tx.attendance.deleteMany({ where: { studentId } });
+      await tx.payment.deleteMany({ where: { enrollmentId: { in: enrollmentIds } } });
+      await tx.enrollment.deleteMany({ where: { studentId } });
+      await tx.studentParent.deleteMany({ where: { studentId } });
+
+      const orphans = await tx.parent.deleteMany({
+        where: { id: { in: parentIds }, StudentParent: { none: {} } }
+      });
+
+      await tx.student.delete({ where: { id: studentId } });
+
+      return { photo: student.photo, parentsRemoved: orphans.count };
+    });
+
+    if (!removed) {
+      return errorResponse("لم يتم العثور على الطفل المطلوب.", 404);
+    }
+
+    // After the commit: a failed file delete must not undo the deletion.
+    try {
+      await deletePhoto(removed.photo);
+    } catch (error) {
+      console.error("Student photo cleanup error:", error);
+    }
+
+    return Response.json(
+      { success: true, parentsRemoved: removed.parentsRemoved },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    console.error("Student DELETE error:", error);
+
+    return errorResponse("حدث خطأ أثناء حذف الطفل.", 500);
   }
 }

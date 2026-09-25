@@ -717,6 +717,11 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
           options={options}
           onClose={() => setDialogId(null)}
           onSaved={handleStudentSaved}
+          onDeleted={(id) => {
+            requestVersion.current += 1;
+            setStudents((previous) => previous.filter((s) => s.id !== id));
+            setDialogId(null);
+          }}
           onFamilyChanged={reloadAfterFamilyChange}
           onEditingChange={editingChanged}
         />
