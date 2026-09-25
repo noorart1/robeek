@@ -45,7 +45,23 @@ const nextConfig = {
   },
 
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      {
+        // The host's LiteSpeed server honours Next's one-year s-maxage on
+        // prerendered pages (/, /login) and kept serving the previous
+        // build's copies after a deploy. Nothing here should sit in a shared
+        // cache (it is an authenticated app with children's data), so opt
+        // out of LiteSpeed caching for everything but the hashed build
+        // assets. The Purge header clears the two stale copies cached
+        // before this rule existed.
+        source: "/((?!_next/static).*)",
+        headers: [
+          { key: "X-LiteSpeed-Cache-Control", value: "no-cache" },
+          { key: "X-LiteSpeed-Purge", value: "/, /login" }
+        ]
+      }
+    ];
   }
 };
 
