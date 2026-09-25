@@ -7,6 +7,7 @@ import { ATTENDANCE_STATUSES, SHIFTS } from "../../lib/labels";
 import { iraqToday, isWeekend, parseDay } from "../../lib/dates";
 import { activeAcademicYear } from "../../lib/student-data";
 import AppHeader from "../../components/AppHeader";
+import TeacherCell from "../../components/TeacherCell";
 
 export const dynamic = "force-dynamic";
 
@@ -148,7 +149,13 @@ export default async function DashboardPage() {
                             الشعبة {cls.name}
                           </Link>
                         </td>
-                        <td style={{ color: "#64748b" }}>{cls.teacherName || ""}</td>
+                        <td>
+                          <TeacherCell
+                            classId={cls.id}
+                            teacherName={cls.teacherName}
+                            sectionName={`${label} ${cls.name}`}
+                          />
+                        </td>
                         {schoolDay && (
                           <td style={{ fontSize: "13px" }}>
                             <TodayAttendance
