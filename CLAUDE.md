@@ -215,9 +215,21 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
   `grandfatherName`, with `lastName` (laqab) optional. Always display them
   with `fullName()` from `lib/labels.js`. Parent names are optional too
   (mothers are often known by phone only) — use `parentName()`.
-- Money columns (fee, paid, remaining, curriculum) are read-only in the table
-  and come from `formatStudent` in `lib/student-data.js`: `totalPaid` counts
-  TUITION payments only, CURRICULUM payments are reported separately.
+- Money columns (fee, paid, remaining, overdue, curriculum) are read-only in
+  the table and come from `formatStudent` in `lib/student-data.js`:
+  `totalPaid` counts TUITION payments only, CURRICULUM payments are reported
+  separately, and **voided payments never count**.
+- **Payments are never deleted, only voided** (`PATCH /api/payments/[id]
+  { void: true }`): a printed receipt keeps its number and stays listed.
+  Receipt numbers (`2526-0001`) come from the `Sequence` table, not
+  `MAX(receiptNo)`, so a number is never reused. Imported payments have no
+  number. Receipts print from `/dashboard/receipts/[id]` (amount in words:
+  `lib/tafqeet.js`).
+- **Overdue** (`lib/dues.js`) follows the school's rules: MONTHLY = the fee
+  in equal parts from the start date to May (8 months morning, 7 evening),
+  YEARLY = two halves 4½ months apart, no plan = assumed monthly. The
+  «المتأخرون» page (`/dashboard/finance/overdue`) builds WhatsApp reminder
+  links (`wa.me/9647…`); nothing is sent automatically.
   Section, fee and attendance type are edited in the dialog, which saves them
   through `PUT /api/students/[id]/enrollment`.
 - **Attendance** (`/dashboard/attendance`, `components/AttendanceBoard.js`)

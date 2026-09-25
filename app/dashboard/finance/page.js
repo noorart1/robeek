@@ -2,7 +2,8 @@
 import prisma from "../../../lib/prisma";
 import { requirePageUser } from "../../../lib/auth";
 import { SHIFTS, classLabel, formatMoney } from "../../../lib/labels";
-import { activeAcademicYear } from "../../../lib/student-data";
+import { activeAcademicYear, formatStudent, studentSelect } from "../../../lib/student-data";
+import Link from "next/link";
 import AppHeader from "../../../components/AppHeader";
 
 export const dynamic = "force-dynamic";
@@ -63,10 +64,18 @@ export default async function FinancePage() {
           tuitionFee: true,
           Class: { select: { id: true, name: true, shift: true } },
           Student: { select: { status: true } },
-          Payment: { select: { amount: true, paymentType: true } }
+          // Voided receipts never count.
+          Payment: { where: { voidedAt: null }, select: { amount: true, paymentType: true } }
         }
       })
     : [];
+
+  const overdue = (
+    await prisma.student.findMany({ where: { status: "ACTIVE" }, select: studentSelect })
+  )
+    .map(formatStudent)
+    .filter((s) => s.financial.overdue > 0);
+  const overdueTotal = overdue.reduce((sum, s) => sum + s.financial.overdue, 0);
 
   const byShift = {};
   const byClass = new Map();
@@ -124,6 +133,27 @@ export default async function FinancePage() {
         <p style={{ color: "#64748b", marginTop: 0 }}>
           {year ? `السنة الدراسية ${year.name}` : "لا توجد سنة دراسية نشطة"} — المبالغ بالدينار العراقي
         </p>
+
+        <Link
+          href="/dashboard/finance/overdue"
+          style={{
+            display: "flex",
+            gap: "12px",
+            alignItems: "center",
+            padding: "14px 18px",
+            marginBottom: "16px",
+            borderRadius: "12px",
+            textDecoration: "none",
+            backgroundColor: overdue.length ? "#fef2f2" : "#f0fdf4",
+            color: overdue.length ? "#b91c1c" : "#15803d"
+          }}
+        >
+          <strong>المتأخرون عن الدفع:</strong>
+          {overdue.length
+            ? `${overdue.length} أطفال — ${formatMoney(overdueTotal)} د.ع`
+            : "لا يوجد"}
+          <span style={{ marginInlineStart: "auto" }}>عرض القائمة وتذكير الأهل ←</span>
+        </Link>
 
         <div style={box}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>

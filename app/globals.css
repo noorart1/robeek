@@ -38,3 +38,24 @@ select,
 textarea {
   font: inherit;
 }
+
+/* Printing (receipts, lists): only the document itself. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
+  .receipt {
+    margin: 0 auto !important;
+    box-shadow: none !important;
+  }
+
+  @page {
+    size: A5 landscape;
+    margin: 10mm;
+  }
+}

@@ -13,9 +13,12 @@ function errorResponse(message, status) {
   );
 }
 
-// حذف دفعة سُجّلت بالخطأ
+// إلغاء وصل: PATCH { void: true, reason? }.
+// Payments are never deleted: a receipt that was printed and handed to a
+// parent keeps its number and stays listed (struck through), it just
+// stops counting towards what was paid.
 
-export async function DELETE(request, { params }) {
+export async function PATCH(request, { params }) {
   try {
     const user = await getCurrentUser();
 
@@ -30,16 +33,40 @@ export async function DELETE(request, { params }) {
       return errorResponse("معرّف الدفعة غير صالح.", 400);
     }
 
+    let body;
+
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse("البيانات المرسلة غير صالحة.", 400);
+    }
+
+    if (body?.void !== true) {
+      return errorResponse("البيانات المرسلة غير صالحة.", 400);
+    }
+
+    const reason =
+      typeof body.reason === "string" && body.reason.trim()
+        ? body.reason.trim().slice(0, 191)
+        : null;
+
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
-      select: { Enrollment: { select: { studentId: true } } }
+      select: { voidedAt: true, Enrollment: { select: { studentId: true } } }
     });
 
     if (!payment) {
       return errorResponse("لم يتم العثور على الدفعة.", 404);
     }
 
-    await prisma.payment.delete({ where: { id: paymentId } });
+    if (payment.voidedAt) {
+      return errorResponse("هذا الوصل ملغى مسبقاً.", 409);
+    }
+
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: { voidedAt: new Date(), voidReason: reason }
+    });
 
     return Response.json(
       {
@@ -49,8 +76,8 @@ export async function DELETE(request, { params }) {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
-    console.error("Payment DELETE error:", error);
+    console.error("Payment PATCH error:", error);
 
-    return errorResponse("حدث خطأ أثناء حذف الدفعة.", 500);
+    return errorResponse("حدث خطأ أثناء إلغاء الوصل.", 500);
   }
 }

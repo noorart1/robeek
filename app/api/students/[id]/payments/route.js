@@ -15,6 +15,22 @@ function errorResponse(message, status, extra = {}) {
   );
 }
 
+// Receipt numbers per academic year: "2025-2026" → 2526-0001, 2526-0002…
+// From the Sequence table, incremented inside the payment's transaction,
+// so a number is never given twice — not even after its payment is gone.
+async function nextReceiptNo(tx, yearName) {
+  const match = /^\d{2}(\d{2})\s*-\s*\d{2}(\d{2})$/.exec(yearName || "");
+  const prefix = match ? `${match[1]}${match[2]}` : "R";
+
+  const counter = await tx.sequence.upsert({
+    where: { name: `receipt-${prefix}` },
+    create: { name: `receipt-${prefix}`, value: 1 },
+    update: { value: { increment: 1 } }
+  });
+
+  return `${prefix}-${String(counter.value).padStart(4, "0")}`;
+}
+
 // تسجيل دفعة: a payment against the child's current enrollment.
 
 export async function POST(request, { params }) {
@@ -60,24 +76,29 @@ export async function POST(request, { params }) {
     // Active academic year first, otherwise the newest enrollment.
     const enrollment = await prisma.enrollment.findFirst({
       where: { studentId },
-      orderBy: [{ AcademicYear: { isActive: "desc" } }, { id: "desc" }]
+      orderBy: [{ AcademicYear: { isActive: "desc" } }, { id: "desc" }],
+      include: { AcademicYear: { select: { name: true } } }
     });
 
     if (!enrollment) {
       return errorResponse("يرجى تسجيل الطفل في شعبة قبل إضافة دفعة.", 400);
     }
 
-    await prisma.payment.create({
-      data: {
-        enrollmentId: enrollment.id,
-        amount,
-        paymentType,
-        description
-      }
-    });
+    const payment = await prisma.$transaction(async (tx) =>
+      tx.payment.create({
+        data: {
+          enrollmentId: enrollment.id,
+          amount,
+          paymentType,
+          description,
+          receiptNo: await nextReceiptNo(tx, enrollment.AcademicYear.name)
+        },
+        select: { id: true, receiptNo: true }
+      })
+    );
 
     return Response.json(
-      { success: true, student: await loadStudent(studentId) },
+      { success: true, payment, student: await loadStudent(studentId) },
       { status: 201, headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {

@@ -92,9 +92,16 @@ model Payment {
   receiptNo    String?    @unique
   description  String?    @db.Text
   createdAt    DateTime   @default(now())
+  voidedAt     DateTime?
+  voidReason   String?
   Enrollment   Enrollment @relation(fields: [enrollmentId], references: [id])
 
   @@index([enrollmentId])
+}
+
+model Sequence {
+  name  String @id @db.VarChar(50)
+  value Int    @default(0)
 }
 
 model Session {

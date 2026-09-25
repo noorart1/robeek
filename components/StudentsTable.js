@@ -30,6 +30,7 @@ const columns = [
   { field: "tuitionFee", label: "المبلغ الإجمالي", kind: "money" },
   { field: "totalPaid", label: "الواصل", kind: "money" },
   { field: "remaining", label: "الباقي", kind: "money" },
+  { field: "overdue", label: "المتأخر", kind: "money" },
   { field: "curriculumPaid", label: "المنهج", kind: "money" },
   { field: "line", label: "خط النقل", kind: "view", value: (s) => s.transportLine?.name || "" },
   { field: "notes", label: "ملاحظات", kind: "edit" },
@@ -412,7 +413,7 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
   function moneyCell(student, field) {
     const value = student.financial?.[field] || 0;
     const color =
-      field === "remaining" && value > 0
+      (field === "remaining" || field === "overdue") && value > 0
         ? "#b91c1c"
         : field === "totalPaid" && value > 0
           ? "#15803d"

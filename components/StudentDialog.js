@@ -775,9 +775,11 @@ function Payments({ student, onSaved, disabled }) {
   const [draft, setDraft] = useState({ amount: "", paymentType: "TUITION", description: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The payment just recorded, offered for printing.
+  const [lastReceipt, setLastReceipt] = useState(null);
 
   const enrollment = student.enrollment;
-  const { tuitionFee, totalPaid, remaining, curriculumPaid } = student.financial;
+  const { tuitionFee, totalPaid, remaining, curriculumPaid, overdue, nextDue } = student.financial;
 
   async function add(event) {
     event.preventDefault();
@@ -791,6 +793,7 @@ function Payments({ student, onSaved, disabled }) {
       if (!response.ok) throw new Error(data.error || "تعذر حفظ الدفعة.");
 
       onSaved(data.student);
+      setLastReceipt(data.payment);
       setDraft({ amount: "", paymentType: draft.paymentType, description: "" });
     } catch (err) {
       setError(err.message);
@@ -799,15 +802,21 @@ function Payments({ student, onSaved, disabled }) {
     }
   }
 
-  async function remove(payment) {
-    if (!window.confirm(`حذف دفعة بمبلغ ${formatMoney(payment.amount)} د.ع؟`)) return;
+  // Receipts are voided, never deleted: the number stays on record.
+  async function voidPayment(payment) {
+    const label = payment.receiptNo ? `الوصل ${payment.receiptNo}` : "هذه الدفعة";
+    const reason = window.prompt(
+      `إلغاء ${label} بمبلغ ${formatMoney(payment.amount)} د.ع؟\nيبقى الوصل في السجل مع علامة «ملغى» ولا يُحسب.\n\nسبب الإلغاء (اختياري):`,
+      ""
+    );
+    if (reason === null) return;
 
     setBusy(true);
     setError("");
 
     try {
-      const { response, data } = await send(`/api/payments/${payment.id}`, "DELETE");
-      if (!response.ok) throw new Error(data.error || "تعذر حذف الدفعة.");
+      const { response, data } = await send(`/api/payments/${payment.id}`, "PATCH", { void: true, reason });
+      if (!response.ok) throw new Error(data.error || "تعذر إلغاء الوصل.");
       onSaved(data.student);
     } catch (err) {
       setError(err.message);
@@ -820,6 +829,7 @@ function Payments({ student, onSaved, disabled }) {
     ["المبلغ الإجمالي", tuitionFee],
     ["الواصل", totalPaid, "#15803d"],
     ["الباقي", remaining, remaining > 0 ? "#b91c1c" : undefined],
+    ["متأخر حتى اليوم", overdue, overdue > 0 ? "#b91c1c" : "#15803d"],
     ["المنهج والزي", curriculumPaid]
   ];
 
@@ -839,6 +849,21 @@ function Payments({ student, onSaved, disabled }) {
         ))}
       </div>
 
+      {nextDue && (
+        <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: "13px" }}>
+          القسط القادم: {formatMoney(nextDue.amount)} د.ع في {formatDate(nextDue.day)}
+        </p>
+      )}
+
+      {lastReceipt && (
+        <p role="status" style={{ margin: "0 0 10px", color: "#15803d" }}>
+          ✓ سُجّلت الدفعة — وصل رقم <strong dir="ltr">{lastReceipt.receiptNo}</strong>{" "}
+          <a href={`/dashboard/receipts/${lastReceipt.id}`} target="_blank" rel="noopener noreferrer">
+            🖨 طباعة الوصل
+          </a>
+        </p>
+      )}
+
       {!enrollment ? (
         <p style={{ color: "#64748b" }}>اختر الشعبة واحفظ أولاً لتسجيل الدفعات.</p>
       ) : (
@@ -848,6 +873,7 @@ function Payments({ student, onSaved, disabled }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                 <thead>
                   <tr style={{ color: "#64748b" }}>
+                    <th style={cell}>الوصل</th>
                     <th style={cell}>التاريخ</th>
                     <th style={cell}>النوع</th>
                     <th style={{ ...cell, textAlign: "left" }}>المبلغ</th>
@@ -856,25 +882,50 @@ function Payments({ student, onSaved, disabled }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {enrollment.payments.map((payment) => (
-                    <tr key={payment.id}>
-                      <td style={cell}>{formatDate(payment.paymentDate)}</td>
-                      <td style={cell}>{PAYMENT_TYPES[payment.paymentType] || "قسط"}</td>
-                      <td style={{ ...cell, textAlign: "left" }}>{formatMoney(payment.amount)}</td>
-                      <td style={cell}>{payment.description || ""}</td>
-                      <td style={cell}>
-                        <button
-                          type="button"
-                          aria-label="حذف الدفعة"
-                          disabled={busy || disabled}
-                          onClick={() => remove(payment)}
-                          style={{ color: "#b91c1c" }}
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {enrollment.payments.map((payment) => {
+                    const voided = Boolean(payment.voidedAt);
+                    const struck = voided ? { textDecoration: "line-through", color: "#94a3b8" } : undefined;
+
+                    return (
+                      <tr key={payment.id}>
+                        <td style={{ ...cell, ...struck }} dir="ltr">{payment.receiptNo || "—"}</td>
+                        <td style={{ ...cell, ...struck }}>{formatDate(payment.paymentDate)}</td>
+                        <td style={{ ...cell, ...struck }}>{PAYMENT_TYPES[payment.paymentType] || "قسط"}</td>
+                        <td style={{ ...cell, ...struck, textAlign: "left" }}>{formatMoney(payment.amount)}</td>
+                        <td style={cell}>
+                          <span style={struck}>{payment.description || ""}</span>
+                          {voided && (
+                            <small style={{ color: "#b91c1c" }}>
+                              {" "}ملغى{payment.voidReason ? `: ${payment.voidReason}` : ""}
+                            </small>
+                          )}
+                        </td>
+                        <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                          <a
+                            href={`/dashboard/receipts/${payment.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="طباعة الوصل"
+                            title="طباعة الوصل"
+                            style={{ textDecoration: "none", marginInlineEnd: "6px" }}
+                          >
+                            🖨
+                          </a>
+                          {!voided && (
+                            <button
+                              type="button"
+                              disabled={busy || disabled}
+                              onClick={() => voidPayment(payment)}
+                              title="إلغاء الوصل (يبقى في السجل)"
+                              style={{ color: "#b91c1c" }}
+                            >
+                              إلغاء
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
