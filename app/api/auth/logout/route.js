@@ -7,13 +7,13 @@ export async function POST() {
 
     return Response.json({
       success: true,
-      message: "خروج با موفقیت انجام شد."
+      message: "تم تسجيل الخروج بنجاح."
     });
   } catch (error) {
     console.error("Logout error:", error);
 
     return Response.json(
-      { error: "خطا در خروج از سامانه." },
+      { error: "حدث خطأ أثناء تسجيل الخروج." },
       { status: 500 }
     );
   }

@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 
 const options = {
   gender: [
@@ -129,6 +130,10 @@ export default function EditableCell({
           })
         }
       );
+
+      if (redirectIfSignedOut(response)) {
+        throw new Error(SESSION_EXPIRED);
+      }
 
       const data = await response.json();
 

@@ -1,7 +1,9 @@
 
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import prisma from "../../lib/prisma";
 import { getCurrentUser } from "../../lib/auth";
-import LogoutButton from "../../components/LogoutButton";
+import AppHeader from "../../components/AppHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -12,60 +14,80 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
+  const [totalStudents, activeStudents, totalParents] =
+    await Promise.all([
+      prisma.student.count(),
+      prisma.student.count({ where: { status: "ACTIVE" } }),
+      prisma.parent.count()
+    ]);
+
+  const stats = [
+    ["عدد الأطفال", totalStudents],
+    ["الأطفال النشطون", activeStudents],
+    ["أولياء الأمور", totalParents]
+  ];
+
   return (
-    <main
-      style={{
-        maxWidth: "1100px",
-        margin: "40px auto",
-        padding: "30px"
-      }}
-    >
-      <header
+    <>
+      <AppHeader user={user} active="/dashboard" />
+
+      <main
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "20px",
-          flexWrap: "wrap",
-          backgroundColor: "#ffffff",
-          padding: "24px",
-          borderRadius: "12px"
+          maxWidth: "1100px",
+          margin: "30px auto",
+          padding: "0 20px"
         }}
       >
-        <div>
-          <h1>سامانه مدیریت مدرسه</h1>
+        <h1 style={{ color: "#1e40af" }}>
+          مرحباً، {user.fullName}
+        </h1>
 
-          <p>
-            خوش آمدید، {user.fullName}
-          </p>
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: "16px"
+          }}
+        >
+          {stats.map(([label, value]) => (
+            <div
+              key={label}
+              style={{
+                padding: "20px",
+                backgroundColor: "#ffffff",
+                borderRadius: "12px"
+              }}
+            >
+              <div style={{ color: "#64748b" }}>{label}</div>
+              <div
+                style={{
+                  fontSize: "32px",
+                  fontWeight: "bold",
+                  color: "#1e293b"
+                }}
+              >
+                {value.toLocaleString("ar-IQ")}
+              </div>
+            </div>
+          ))}
+        </section>
 
-          <p style={{ color: "#64748b" }}>
-            سطح دسترسی: مدیر مدرسه
-          </p>
-        </div>
-
-        <LogoutButton />
-      </header>
-
-      <section
-        style={{
-          marginTop: "30px",
-          padding: "30px",
-          backgroundColor: "#ffffff",
-          borderRadius: "12px"
-        }}
-      >
-        <h2>پنل مدیریت</h2>
-
-        <p>
-          به سامانه مدیریت مدرسه خوش آمدید.
-        </p>
-
-        <p>
-          بخش مدیریت دانش‌آموزان به‌زودی
-          در این قسمت فعال خواهد شد.
-        </p>
-      </section>
-    </main>
+        <Link
+          href="/dashboard/students"
+          style={{
+            display: "inline-block",
+            marginTop: "24px",
+            padding: "14px 28px",
+            backgroundColor: "#2563eb",
+            color: "#ffffff",
+            borderRadius: "8px",
+            textDecoration: "none"
+          }}
+        >
+          إدارة بيانات الأطفال ←
+        </Link>
+      </main>
+    </>
   );
 }

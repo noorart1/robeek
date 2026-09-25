@@ -1,5 +1,6 @@
 import prisma from "../../../../../lib/prisma";
 import { getCurrentUser } from "../../../../../lib/auth";
+import { toWesternDigits } from "../../../../../lib/digits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -231,7 +232,7 @@ export async function POST(request, { params }) {
 
           const phone =
             typeof body.phone === "string"
-              ? body.phone.trim()
+              ? toWesternDigits(body.phone.trim())
               : "";
 
           if (

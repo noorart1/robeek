@@ -23,7 +23,7 @@ export default function LogoutButton() {
 
       window.location.replace("/login");
     } catch {
-      alert("خروج انجام نشد. لطفاً دوباره تلاش کنید.");
+      alert("تعذر تسجيل الخروج. يرجى المحاولة مرة أخرى.");
       setLoading(false);
     }
   }
@@ -38,12 +38,13 @@ export default function LogoutButton() {
         color: "#ffffff",
         border: "none",
         borderRadius: "8px",
-        padding: "12px 24px",
-        fontSize: "15px",
+        padding: "8px 18px",
+        fontSize: "14px",
+        fontFamily: "inherit",
         cursor: loading ? "wait" : "pointer"
       }}
     >
-      {loading ? "در حال خروج..." : "خروج از سامانه"}
+      {loading ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
     </button>
   );
 }

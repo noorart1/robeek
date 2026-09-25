@@ -1,5 +1,6 @@
 import prisma from "../../../../lib/prisma";
 import { getCurrentUser } from "../../../../lib/auth";
+import { toWesternDigits } from "../../../../lib/digits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,7 +111,9 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    const trimmedValue = value.trim();
+    const trimmedValue = ["phone", "phone2"].includes(field)
+      ? toWesternDigits(value.trim())
+      : value.trim();
 
     if (
       requiredFields.includes(field) &&

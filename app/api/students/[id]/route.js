@@ -1,6 +1,7 @@
 
 import prisma from "../../../../lib/prisma";
 import { getCurrentUser } from "../../../../lib/auth";
+import { toWesternDigits } from "../../../../lib/digits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +59,14 @@ const nullableFields = [
   "address",
   "emergencyPhone",
   "notes"
+];
+
+// Fields where Arabic-Indic digits are accepted and stored as ASCII
+const digitFields = [
+  "studentCode",
+  "nationalId",
+  "phone",
+  "emergencyPhone"
 ];
 
 // پاسخ خطا
@@ -197,7 +206,9 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    const trimmedValue = value.trim();
+    const trimmedValue = digitFields.includes(field)
+      ? toWesternDigits(value.trim())
+      : value.trim();
 
     // بررسی فیلدهای الزامی
 
@@ -258,7 +269,7 @@ export async function PATCH(request, { params }) {
     ) {
       if (!/^[0-9]{1,30}$/.test(trimmedValue)) {
         return errorResponse(
-          "يرجى إدخال الرقم الوطني باستخدام الأرقام الإنجليزية فقط.",
+          "يرجى إدخال الرقم الوطني بالأرقام فقط.",
           400
         );
       }

@@ -1,12 +1,12 @@
 
 export const metadata = {
-  title: "سامانه مدیریت مدرسه",
-  description: "سامانه مدیریت دانش‌آموزان"
+  title: "نظام إدارة المدرسة",
+  description: "نظام إدارة بيانات الأطفال وأولياء الأمور"
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="fa" dir="rtl">
+    <html lang="ar" dir="rtl">
       <body style={{
         margin: 0,
         fontFamily: "Tahoma, Arial, sans-serif",

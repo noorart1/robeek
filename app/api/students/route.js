@@ -1,6 +1,7 @@
 
 import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
+import { toWesternDigits } from "../../../lib/digits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -210,9 +211,7 @@ export async function GET() {
 
       orderBy: {
         id: "desc"
-      },
-
-      take: 100
+      }
     });
 
     const formattedStudents =
@@ -295,7 +294,7 @@ export async function POST(request) {
 
     const studentCode =
       typeof body.studentCode === "string"
-        ? body.studentCode.trim()
+        ? toWesternDigits(body.studentCode.trim())
         : "";
 
     const firstName =

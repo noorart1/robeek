@@ -32,14 +32,14 @@ export default function LoginPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setError(result.error || "ورود ناموفق بود.");
+        setError(result.error || "فشل تسجيل الدخول.");
         return;
       }
 
       router.replace("/dashboard");
       router.refresh();
     } catch {
-      setError("ارتباط با سرور برقرار نشد.");
+      setError("تعذر الاتصال بالخادم.");
     } finally {
       setLoading(false);
     }
@@ -69,18 +69,18 @@ export default function LoginPage() {
           textAlign: "center",
           color: "#1e40af"
         }}>
-          سامانه مدیریت مدرسه
+          نظام إدارة المدرسة
         </h1>
 
         <p style={{
           textAlign: "center",
           color: "#64748b"
         }}>
-          ورود مدیر مدرسه
+          تسجيل دخول المدير
         </p>
 
         <label htmlFor="username">
-          نام کاربری
+          اسم المستخدم
         </label>
 
         <input
@@ -94,7 +94,7 @@ export default function LoginPage() {
         />
 
         <label htmlFor="password">
-          رمز عبور
+          كلمة المرور
         </label>
 
         <input
@@ -127,7 +127,7 @@ export default function LoginPage() {
             cursor: loading ? "wait" : "pointer"
           }}
         >
-          {loading ? "در حال بررسی..." : "ورود به سامانه"}
+          {loading ? "جارٍ التحقق..." : "تسجيل الدخول"}
         </button>
       </form>
     </main>

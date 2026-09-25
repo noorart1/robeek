@@ -3,7 +3,8 @@ import prisma from "../../../../lib/prisma";
 import { createSession } from "../../../../lib/auth";
 
 import {
-  getLoginKey,
+  getClientIp,
+  getLoginKeys,
   checkLoginLimit,
   recordFailedLogin,
   resetLoginLimit
@@ -12,6 +13,10 @@ import {
 import bcrypt from "bcryptjs";
 
 export const runtime = "nodejs";
+
+// Compared against when the username does not exist, so that response
+// time does not reveal which usernames are real.
+const DUMMY_HASH = bcrypt.hashSync("dummy-password", 12);
 
 export async function POST(request) {
   try {
@@ -27,20 +32,23 @@ export async function POST(request) {
       password.length > 1024
     ) {
       return Response.json(
-        { error: "اطلاعات ورود نامعتبر است." },
+        { error: "بيانات الدخول غير صالحة." },
         { status: 400 }
       );
     }
 
-    const loginKey = getLoginKey(username);
+    const loginKeys = getLoginKeys(
+      username,
+      getClientIp(request)
+    );
 
-    const allowed = await checkLoginLimit(loginKey);
+    const allowed = await checkLoginLimit(loginKeys);
 
     if (!allowed) {
       return Response.json(
         {
           error:
-            "تعداد تلاش‌های ورود بیش از حد مجاز است. لطفاً ۱۵ دقیقه بعد تلاش کنید."
+            "تم تجاوز عدد محاولات الدخول المسموح بها. يرجى المحاولة بعد ١٥ دقيقة."
         },
         { status: 429 }
       );
@@ -50,12 +58,10 @@ export async function POST(request) {
       where: { username }
     });
 
-    const validPassword = user
-      ? await bcrypt.compare(
-          password,
-          user.passwordHash
-        )
-      : false;
+    const validPassword = await bcrypt.compare(
+      password,
+      user ? user.passwordHash : DUMMY_HASH
+    );
 
     if (
       !user ||
@@ -63,18 +69,18 @@ export async function POST(request) {
       user.role !== "ADMIN" ||
       !validPassword
     ) {
-      await recordFailedLogin(loginKey);
+      await recordFailedLogin(loginKeys);
 
       return Response.json(
         {
           error:
-            "نام کاربری یا رمز عبور نادرست است."
+            "اسم المستخدم أو كلمة المرور غير صحيحة."
         },
         { status: 401 }
       );
     }
 
-    await resetLoginLimit(loginKey);
+    await resetLoginLimit(loginKeys);
 
     await createSession(user.id);
 
@@ -85,7 +91,7 @@ export async function POST(request) {
     console.error("Login error:", error);
 
     return Response.json(
-      { error: "خطا در ورود به سامانه." },
+      { error: "حدث خطأ أثناء تسجيل الدخول." },
       { status: 500 }
     );
   }

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import EditableCell from "./EditableCell";
+import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 
 export default function ParentLinkCell({studentId, relation, parent, onChanged, onEditingChange}) {
   const [open, setOpen] = useState(false);
@@ -15,6 +16,7 @@ export default function ParentLinkCell({studentId, relation, parent, onChanged, 
     if (!open || mode !== "existing") return;
     let active = true;
     fetch("/api/parents", {cache:"no-store"}).then(async r => {
+      if (redirectIfSignedOut(r)) throw new Error(SESSION_EXPIRED);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "تعذر تحميل أولياء الأمور");
       if (active) setList(data.parents);
@@ -28,6 +30,7 @@ export default function ParentLinkCell({studentId, relation, parent, onChanged, 
     try {
       const payload = mode === "existing" ? {relation,parentId:Number(selected)} : {relation,...form};
       const r = await fetch(`/api/students/${studentId}/parents`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      if (redirectIfSignedOut(r)) throw new Error(SESSION_EXPIRED);
       const data = await r.json();
       if(!r.ok) throw new Error(data.error || "تعذر حفظ ولي الأمر");
       close(); await onChanged();

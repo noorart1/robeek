@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import EditableCell from "./EditableCell";
 import ParentLinkCell from "./ParentLinkCell";
+import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 
 const columns = [
   { field: "studentCode", label: "رمز الطفل" },
@@ -68,6 +69,10 @@ export default function StudentsTable() {
     const response = await fetch("/api/students", {
       cache: "no-store"
     });
+
+    if (redirectIfSignedOut(response)) {
+      throw new Error(SESSION_EXPIRED);
+    }
 
     if (!response.ok) {
       throw new Error("تعذر تحميل بيانات الأطفال.");
@@ -180,6 +185,10 @@ export default function StudentsTable() {
         },
         body: JSON.stringify(form)
       });
+
+      if (redirectIfSignedOut(response)) {
+        throw new Error(SESSION_EXPIRED);
+      }
 
       const data = await response.json();
 
