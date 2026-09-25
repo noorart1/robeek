@@ -36,7 +36,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.replace("/dashboard");
+      router.replace(result.home || "/dashboard");
       router.refresh();
     } catch {
       setError("تعذر الاتصال بالخادم.");

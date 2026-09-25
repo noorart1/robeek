@@ -1,8 +1,7 @@
 
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import prisma from "../../lib/prisma";
-import { getCurrentUser } from "../../lib/auth";
+import { requirePageUser } from "../../lib/auth";
 import { ATTENDANCE_STATUSES, SHIFTS } from "../../lib/labels";
 import { iraqToday, isWeekend, parseDay } from "../../lib/dates";
 import { activeAcademicYear } from "../../lib/student-data";
@@ -18,11 +17,7 @@ const card = {
 };
 
 export default async function DashboardPage() {
-  const user = await getCurrentUser();
-
-  if (!user || user.role !== "ADMIN") {
-    redirect("/login");
-  }
+  const user = await requirePageUser(["ADMIN"]);
 
   const year = await activeAcademicYear();
   const today = iraqToday();

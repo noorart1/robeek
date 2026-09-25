@@ -34,10 +34,13 @@ model Class {
   capacity       Int?
   academicYearId Int
   teacherName    String?
+  teacherUserId  Int?
   AcademicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
   Enrollment     Enrollment[]
+  Teacher        User?        @relation(fields: [teacherUserId], references: [id])
 
   @@index([academicYearId])
+  @@index([teacherUserId])
 }
 
 model Enrollment {
@@ -165,10 +168,12 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime
   Session      Session[]
+  Class        Class[]
 }
 
 enum User_role {
   ADMIN
   DEPUTY
   REGISTRAR
+  TEACHER
 }

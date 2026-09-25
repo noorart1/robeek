@@ -167,6 +167,23 @@ neither file: use a password manager, and keep `.env` gitignored.
   just the file name. Back it up together with the database — a DB dump alone
   loses every photo — and never move it under `public/`.
 
+## Roles
+
+Two roles can sign in (`ROLE_HOME` in `lib/auth.js`):
+
+- **ADMIN** — everything.
+- **TEACHER** (مرشدة) — only `/dashboard/attendance` and «حسابي», and only
+  for the sections whose `Class.teacherUserId` is her account. Names only:
+  attendance responses carry no photo for her.
+
+Server pages call `requirePageUser([...roles])`, which redirects other
+roles to their own start page. Every API route checks the role itself;
+`/api/attendance` and `/api/options` additionally scope a teacher to her
+sections. When adding a route, decide its roles explicitly — the default
+in this codebase is ADMIN only. Accounts are managed at
+`/dashboard/users`; guards there keep at least one active admin and stop
+an admin from deactivating or demoting themselves.
+
 ## Table UI conventions (`components/`)
 
 The students table is dense by design — an operator scans many rows at once.

@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const user = await getCurrentUser();
 
-    if (!user || user.role !== "ADMIN") {
+    if (!user || (user.role !== "ADMIN" && user.role !== "TEACHER")) {
       return Response.json(
         { error: "ليس لديك صلاحية الوصول." },
         { status: 401 }
@@ -20,14 +20,19 @@ export async function GET() {
     }
 
     const year = await activeAcademicYear();
+    const teacher = user.role === "TEACHER";
 
     const [classes, lines] = await Promise.all([
       prisma.class.findMany({
-        where: year ? { academicYearId: year.id } : undefined,
-        select: { id: true, name: true, shift: true, teacherName: true },
+        where: {
+          ...(year ? { academicYearId: year.id } : {}),
+          // A teacher only sees the sections assigned to her.
+          ...(teacher ? { teacherUserId: user.id } : {})
+        },
+        select: { id: true, name: true, shift: true, teacherName: true, teacherUserId: true },
         orderBy: [{ shift: "desc" }, { name: "asc" }]
       }),
-      prisma.transportLine.findMany({
+      teacher ? [] : prisma.transportLine.findMany({
         select: { id: true, name: true, driverPhone: true, shift: true },
         orderBy: { id: "asc" }
       })

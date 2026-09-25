@@ -1,7 +1,6 @@
 
-import { redirect } from "next/navigation";
 import prisma from "../../../lib/prisma";
-import { getCurrentUser } from "../../../lib/auth";
+import { requirePageUser } from "../../../lib/auth";
 import { classLabel, fullName } from "../../../lib/labels";
 import AppHeader from "../../../components/AppHeader";
 import { AddLine, LineHeader } from "../../../components/LineEditor";
@@ -20,11 +19,7 @@ function phoneOf(student, relation) {
 }
 
 export default async function LinesPage() {
-  const user = await getCurrentUser();
-
-  if (!user || user.role !== "ADMIN") {
-    redirect("/login");
-  }
+  const user = await requirePageUser(["ADMIN"]);
 
   const lines = await prisma.transportLine.findMany({
     orderBy: { id: "asc" },

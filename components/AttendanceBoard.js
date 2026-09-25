@@ -36,6 +36,7 @@ export default function AttendanceBoard() {
   const today = iraqToday();
 
   const [classes, setClasses] = useState([]);
+  const [classesLoaded, setClassesLoaded] = useState(false);
   const [classId, setClassId] = useState("");
   const [date, setDate] = useState(isWeekend(today) ? stepSchoolDay(today, -1) : today);
   const [view, setView] = useState("day");
@@ -57,6 +58,7 @@ export default function AttendanceBoard() {
         if (!response.ok) throw new Error(data.error);
 
         setClasses(data.classes);
+        setClassesLoaded(true);
         const stored = readStoredClass();
         const initial =
           data.classes.find((c) => String(c.id) === stored) || data.classes[0];
@@ -193,6 +195,18 @@ export default function AttendanceBoard() {
     view === "day"
       ? stepSchoolDay(date, 1)
       : addDays(date, 7) > today ? today : addDays(date, 7);
+
+  // A teacher account with no section assigned yet.
+  if (classesLoaded && classes.length === 0) {
+    return (
+      <main style={{ maxWidth: "700px", margin: "40px auto", padding: "0 16px" }}>
+        <h1 style={{ color: "#1e40af" }}>الحضور والغياب</h1>
+        <p style={{ padding: "16px", backgroundColor: "#fffbeb", borderRadius: "10px" }}>
+          لم تُسند إليك أي شعبة بعد. يرجى مراجعة الإدارة.
+        </p>
+      </main>
+    );
+  }
 
   return (
     <main style={{ maxWidth: "1100px", margin: "16px auto", padding: "0 16px" }}>

@@ -2,12 +2,14 @@
 import Link from "next/link";
 import LogoutButton from "./LogoutButton";
 
+// Teachers see attendance only; the pages themselves enforce the same.
 const links = [
-  { href: "/dashboard", label: "الرئيسية" },
-  { href: "/dashboard/students", label: "الأطفال" },
-  { href: "/dashboard/attendance", label: "الحضور" },
-  { href: "/dashboard/finance", label: "المالية" },
-  { href: "/dashboard/lines", label: "الخطوط" }
+  { href: "/dashboard", label: "الرئيسية", roles: ["ADMIN"] },
+  { href: "/dashboard/students", label: "الأطفال", roles: ["ADMIN"] },
+  { href: "/dashboard/attendance", label: "الحضور", roles: ["ADMIN", "TEACHER"] },
+  { href: "/dashboard/finance", label: "المالية", roles: ["ADMIN"] },
+  { href: "/dashboard/lines", label: "الخطوط", roles: ["ADMIN"] },
+  { href: "/dashboard/users", label: "المستخدمون", roles: ["ADMIN"] }
 ];
 
 export default function AppHeader({ user, active }) {
@@ -24,7 +26,7 @@ export default function AppHeader({ user, active }) {
       }}
     >
       <Link
-        href="/dashboard"
+        href={user.role === "TEACHER" ? "/dashboard/attendance" : "/dashboard"}
         style={{
           display: "flex",
           alignItems: "center",
@@ -39,7 +41,7 @@ export default function AppHeader({ user, active }) {
       </Link>
 
       <nav style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-        {links.map(({ href, label }) => (
+        {links.filter((link) => link.roles.includes(user.role)).map(({ href, label }) => (
           <Link
             key={href}
             href={href}

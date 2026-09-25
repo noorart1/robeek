@@ -1,7 +1,6 @@
 
-import { redirect } from "next/navigation";
 import prisma from "../../../lib/prisma";
-import { getCurrentUser } from "../../../lib/auth";
+import { requirePageUser } from "../../../lib/auth";
 import { SHIFTS, classLabel, formatMoney } from "../../../lib/labels";
 import { activeAcademicYear } from "../../../lib/student-data";
 import AppHeader from "../../../components/AppHeader";
@@ -53,11 +52,7 @@ function Row({ label, totals, strong }) {
 }
 
 export default async function FinancePage() {
-  const user = await getCurrentUser();
-
-  if (!user || user.role !== "ADMIN") {
-    redirect("/login");
-  }
+  const user = await requirePageUser(["ADMIN"]);
 
   const year = await activeAcademicYear();
 

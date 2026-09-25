@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { createSession } from "../../../../lib/auth";
+import { canSignIn, createSession, ROLE_HOME } from "../../../../lib/auth";
 
 import {
   getClientIp,
@@ -66,7 +66,7 @@ export async function POST(request) {
     if (
       !user ||
       !user.isActive ||
-      user.role !== "ADMIN" ||
+      !canSignIn(user.role) ||
       !validPassword
     ) {
       await recordFailedLogin(loginKeys);
@@ -84,8 +84,10 @@ export async function POST(request) {
 
     await createSession(user.id);
 
+    // Where this role starts: teachers go straight to attendance.
     return Response.json({
-      success: true
+      success: true,
+      home: ROLE_HOME[user.role]
     });
   } catch (error) {
     console.error("Login error:", error);

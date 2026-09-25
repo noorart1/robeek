@@ -16,10 +16,14 @@ function errorResponse(message, status) {
   );
 }
 
-async function checkAdmin() {
+// Admins take attendance for any section; a teacher only for the sections
+// assigned to her (Class.teacherUserId). Returns the user, or null.
+async function attendanceUser() {
   const user = await getCurrentUser();
-  return Boolean(user && user.role === "ADMIN");
+  return user && (user.role === "ADMIN" || user.role === "TEACHER") ? user : null;
 }
+
+const forbidden = () => errorResponse("هذه الشعبة غير مسندة إليك.", 403);
 
 // الحضور والغياب لشعبة: the section's active children and their records
 // between ?from and ?to (inclusive).
@@ -27,7 +31,9 @@ async function checkAdmin() {
 
 export async function GET(request) {
   try {
-    if (!(await checkAdmin())) {
+    const user = await attendanceUser();
+
+    if (!user) {
       return errorResponse("ليس لديك صلاحية الوصول.", 401);
     }
 
@@ -42,6 +48,11 @@ export async function GET(request) {
 
     if (!from || !to || to < from || (to - from) / 86400000 > MAX_RANGE_DAYS) {
       return errorResponse("الفترة المحددة غير صالحة.", 400);
+    }
+
+    if (user.role === "TEACHER") {
+      const own = await prisma.class.count({ where: { id: classId, teacherUserId: user.id } });
+      if (!own) return forbidden();
     }
 
     const students = await prisma.student.findMany({
@@ -73,6 +84,8 @@ export async function GET(request) {
         today: iraqToday(),
         students: students.map(({ Attendance, ...student }) => ({
           ...student,
+          // Teachers get names only: no photo.
+          photo: user.role === "TEACHER" ? null : student.photo,
           attendance: Object.fromEntries(
             Attendance.map((record) => [
               dayString(record.date),
@@ -96,7 +109,9 @@ export async function GET(request) {
 
 export async function PUT(request) {
   try {
-    if (!(await checkAdmin())) {
+    const user = await attendanceUser();
+
+    if (!user) {
       return errorResponse("ليس لديك صلاحية الوصول.", 401);
     }
 
@@ -134,6 +149,19 @@ export async function PUT(request) {
       ) {
         return errorResponse("بيانات الحضور غير صالحة.", 400);
       }
+    }
+
+    // A teacher may only mark children enrolled in her own sections.
+    if (user.role === "TEACHER") {
+      const ids = [...new Set(entries.map((entry) => entry.studentId))];
+      const own = await prisma.student.count({
+        where: {
+          id: { in: ids },
+          Enrollment: { some: { Class: { teacherUserId: user.id } } }
+        }
+      });
+
+      if (own !== ids.length) return forbidden();
     }
 
     await prisma.$transaction(
