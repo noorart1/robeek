@@ -66,7 +66,14 @@ export default function AppHeader({ user, active }) {
           gap: "12px"
         }}
       >
-        <span style={{ color: "#64748b" }}>{user.fullName}</span>
+        <Link
+          href="/dashboard/account"
+          title="حسابي — تغيير كلمة المرور"
+          aria-current={active === "/dashboard/account" ? "page" : undefined}
+          style={{ color: active === "/dashboard/account" ? "#1e40af" : "#64748b", textDecoration: "none" }}
+        >
+          👤 {user.fullName}
+        </Link>
         <LogoutButton />
       </div>
     </header>
