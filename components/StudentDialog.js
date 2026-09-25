@@ -5,58 +5,122 @@ import { useEffect, useRef, useState } from "react";
 import ParentLinkCell from "./ParentLinkCell";
 import StudentPhoto, { toJpeg } from "./StudentPhoto";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
+import { formatDate } from "../lib/arabic";
+import {
+  ATTENDANCE_TYPES,
+  PAYMENT_PLANS,
+  PAYMENT_TYPES,
+  classLabel,
+  formatMoney,
+  fullName
+} from "../lib/labels";
 
-const fields = [
-  { name: "studentCode", label: "رمز الطفل", max: 50, required: true },
-  { name: "firstName", label: "الاسم", max: 100, required: true },
-  { name: "lastName", label: "اللقب", max: 100, required: true },
-  { name: "nationalId", label: "الرقم الوطني", max: 30, ltr: true },
-  { name: "birthDate", label: "تاريخ الميلاد", type: "date" },
-  {
-    name: "gender",
-    label: "الجنس",
-    options: [
-      ["", "غير محدد"],
-      ["MALE", "ذكر"],
-      ["FEMALE", "أنثى"]
-    ]
-  },
-  { name: "phone", label: "رقم الهاتف", max: 30, ltr: true },
-  { name: "emergencyPhone", label: "هاتف الطوارئ", max: 30, ltr: true },
-  {
-    name: "status",
-    label: "الحالة",
-    options: [
-      ["ACTIVE", "نشط"],
-      ["INACTIVE", "غير نشط"]
-    ]
-  },
-  { name: "address", label: "عنوان السكن", max: 500, multiline: true },
-  { name: "notes", label: "ملاحظات", max: 500, multiline: true }
-];
+// Student fields, saved with PATCH /api/students/[id] { fields }.
+function studentFields(lines) {
+  return [
+    { name: "firstName", label: "الاسم", max: 100, required: true },
+    { name: "fatherName", label: "اسم الأب", max: 100 },
+    { name: "grandfatherName", label: "اسم الجد", max: 100 },
+    { name: "lastName", label: "اللقب", max: 100 },
+    { name: "studentCode", label: "رمز الطفل", max: 50, required: true, ltr: true },
+    { name: "birthYear", label: "المواليد (السنة)", max: 4, ltr: true },
+    { name: "birthDate", label: "تاريخ الميلاد الكامل", type: "date" },
+    {
+      name: "gender",
+      label: "الجنس",
+      options: [
+        ["", "غير محدد"],
+        ["MALE", "ذكر"],
+        ["FEMALE", "أنثى"]
+      ]
+    },
+    { name: "nationalId", label: "الرقم الوطني", max: 30, ltr: true },
+    { name: "phone", label: "رقم الهاتف", max: 30, ltr: true },
+    { name: "emergencyPhone", label: "هاتف الطوارئ", max: 30, ltr: true },
+    {
+      name: "transportLineId",
+      label: "خط النقل",
+      options: [["", "بدون خط"], ...lines.map((line) => [String(line.id), `خط ${line.name}`])]
+    },
+    {
+      name: "status",
+      label: "الحالة",
+      options: [
+        ["ACTIVE", "نشط"],
+        ["INACTIVE", "غير نشط (ألغي التسجيل)"]
+      ]
+    },
+    { name: "address", label: "السكن", max: 500, multiline: true },
+    { name: "notes", label: "ملاحظات", max: 500, multiline: true }
+  ];
+}
 
 function valuesOf(student) {
-  return Object.fromEntries(
-    fields.map(({ name }) => [
-      name,
-      name === "birthDate"
-        ? String(student.birthDate ?? "").slice(0, 10)
-        : student[name] ?? ""
-    ])
-  );
+  return {
+    firstName: student.firstName ?? "",
+    fatherName: student.fatherName ?? "",
+    grandfatherName: student.grandfatherName ?? "",
+    lastName: student.lastName ?? "",
+    studentCode: student.studentCode ?? "",
+    birthYear: student.birthYear ? String(student.birthYear) : "",
+    birthDate: String(student.birthDate ?? "").slice(0, 10),
+    gender: student.gender ?? "",
+    nationalId: student.nationalId ?? "",
+    phone: student.phone ?? "",
+    emergencyPhone: student.emergencyPhone ?? "",
+    transportLineId: student.transportLine ? String(student.transportLine.id) : "",
+    status: student.status ?? "ACTIVE",
+    address: student.address ?? "",
+    notes: student.notes ?? "",
+    reviewNote: student.reviewNote ?? ""
+  };
+}
+
+// Enrollment fields, saved with PUT /api/students/[id]/enrollment.
+function enrollmentOf(student) {
+  const e = student.enrollment;
+
+  return {
+    classId: e?.class ? String(e.class.id) : "",
+    attendanceType: e?.attendanceType ?? "",
+    paymentPlan: e?.paymentPlan ?? "",
+    tuitionFee: e ? String(student.financial.tuitionFee) : "",
+    enrollmentDate: e ? String(e.enrollmentDate ?? "").slice(0, 10) : ""
+  };
+}
+
+const changedKeys = (form, original) =>
+  Object.keys(form).filter((key) => form[key] !== original[key]);
+
+async function send(url, method, body) {
+  const response = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  if (redirectIfSignedOut(response)) {
+    throw new Error(SESSION_EXPIRED);
+  }
+
+  return { response, data: await response.json() };
 }
 
 export default function StudentDialog({
   student,
+  options,
   onClose,
   onSaved,
   onFamilyChanged,
   onEditingChange
 }) {
   const dialogRef = useRef(null);
+  const fields = studentFields(options.lines);
 
   const [original, setOriginal] = useState(() => valuesOf(student));
   const [form, setForm] = useState(original);
+  const [enrollOriginal, setEnrollOriginal] = useState(() => enrollmentOf(student));
+  const [enroll, setEnroll] = useState(enrollOriginal);
   const [version, setVersion] = useState(student.updatedAt);
   const [serverValues, setServerValues] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -64,9 +128,9 @@ export default function StudentDialog({
   const [error, setError] = useState("");
   const [fieldError, setFieldError] = useState(null);
 
-  const changed = fields
-    .map(({ name }) => name)
-    .filter((name) => form[name] !== original[name]);
+  const changed = changedKeys(form, original);
+  const enrollChanged = changedKeys(enroll, enrollOriginal);
+  const dirty = changed.length > 0 || enrollChanged.length > 0;
 
   // Open as a modal, and keep the table from polling underneath it.
   useEffect(() => {
@@ -80,14 +144,16 @@ export default function StudentDialog({
   function requestClose() {
     if (saving) return;
 
-    if (
-      changed.length > 0 &&
-      !window.confirm("هل تريد إغلاق النافذة دون حفظ التغييرات؟")
-    ) {
+    if (dirty && !window.confirm("هل تريد إغلاق النافذة دون حفظ التغييرات؟")) {
       return;
     }
 
     onClose();
+  }
+
+  function showFieldError(name, message) {
+    setFieldError({ name, message });
+    document.getElementById(`student-${name}`)?.focus();
   }
 
   async function save(event) {
@@ -95,7 +161,7 @@ export default function StudentDialog({
 
     if (saving) return;
 
-    if (changed.length === 0) {
+    if (!dirty) {
       onClose();
       return;
     }
@@ -105,57 +171,67 @@ export default function StudentDialog({
     setFieldError(null);
 
     try {
-      const response = await fetch(`/api/students/${student.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fields: Object.fromEntries(
-            changed.map((name) => [name, form[name]])
-          ),
+      let latest = null;
+
+      if (changed.length > 0) {
+        const { response, data } = await send(`/api/students/${student.id}`, "PATCH", {
+          fields: Object.fromEntries(changed.map((name) => [name, form[name]])),
           updatedAt: version
-        })
-      });
+        });
 
-      if (redirectIfSignedOut(response)) {
-        throw new Error(SESSION_EXPIRED);
-      }
+        // Someone else saved this child meanwhile. Keep what the user typed,
+        // show the other user's values beside the fields they changed, and
+        // let a second save knowingly overwrite them.
+        if (response.status === 409 && data.code === "EDIT_CONFLICT") {
+          const current = valuesOf(data.student);
 
-      const data = await response.json();
-
-      // Someone else saved this child meanwhile. Keep what the user typed,
-      // show the other user's values beside the fields they changed, and
-      // let a second save knowingly overwrite them.
-      if (response.status === 409 && data.code === "EDIT_CONFLICT") {
-        const current = valuesOf(data.student);
-
-        setServerValues(
-          Object.fromEntries(
-            fields
-              .map(({ name }) => name)
-              .filter((name) => current[name] !== original[name])
-              .map((name) => [name, current[name]])
-          )
-        );
-        setOriginal(current);
-        setVersion(data.student.updatedAt);
-        onSaved(data.student);
-        setError(
-          "قام مستخدم آخر بتعديل بيانات هذا الطفل أثناء التحرير. راجع القيم المشار إليها ثم اضغط حفظ مرة أخرى."
-        );
-        return;
-      }
-
-      if (!response.ok) {
-        if (data.field) {
-          setFieldError({ name: data.field, message: data.error });
-          document.getElementById(`student-${data.field}`)?.focus();
+          setServerValues(
+            Object.fromEntries(
+              Object.keys(current)
+                .filter((name) => current[name] !== original[name])
+                .map((name) => [name, current[name]])
+            )
+          );
+          setOriginal(current);
+          setVersion(data.student.updatedAt);
+          onSaved(data.student);
+          setError(
+            "قام مستخدم آخر بتعديل بيانات هذا الطفل أثناء التحرير. راجع القيم المشار إليها ثم اضغط حفظ مرة أخرى."
+          );
           return;
         }
 
-        throw new Error(data.error || "تعذر حفظ التغييرات.");
+        if (!response.ok) {
+          if (data.field) return showFieldError(data.field, data.error);
+          throw new Error(data.error || "تعذر حفظ التغييرات.");
+        }
+
+        latest = data.student;
+        setOriginal(valuesOf(latest));
+        setVersion(latest.updatedAt);
       }
 
-      onSaved(data.student);
+      if (enrollChanged.length > 0) {
+        if (!enroll.classId) {
+          return showFieldError("classId", "يرجى اختيار الشعبة.");
+        }
+
+        const { response, data } = await send(
+          `/api/students/${student.id}/enrollment`,
+          "PUT",
+          enroll
+        );
+
+        if (!response.ok) {
+          if (latest) onSaved(latest);
+          if (data.field) return showFieldError(data.field, data.error);
+          throw new Error(data.error || "تعذر حفظ بيانات التسجيل.");
+        }
+
+        latest = data.student;
+      }
+
+      onSaved(latest);
       onClose();
     } catch (err) {
       setError(err.message || "حدث خطأ في الاتصال بالخادم.");
@@ -238,7 +314,7 @@ export default function StudentDialog({
   const inputStyle = (name) => ({
     width: "100%",
     boxSizing: "border-box",
-    padding: "9px",
+    padding: "8px",
     border: `1px solid ${
       fieldError?.name === name
         ? "#dc2626"
@@ -247,9 +323,97 @@ export default function StudentDialog({
           : "#cbd5e1"
     }`,
     borderRadius: "6px",
-    fontFamily: "inherit",
-    fontSize: "14px"
+    fontSize: "14px",
+    backgroundColor: "#ffffff"
   });
+
+  const labelStyle = (wide) => ({
+    display: "grid",
+    gap: "3px",
+    gridColumn: wide ? "1 / -1" : undefined,
+    fontSize: "13px",
+    color: "#475569"
+  });
+
+  const grid = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "10px 14px"
+  };
+
+  const sectionTitle = { margin: "18px 0 8px", color: "#1e40af", fontSize: "16px" };
+  const formId = `student-form-${student.id}`;
+  const cls = student.enrollment?.class;
+
+  function fieldControl(field, value, onChange) {
+    const common = {
+      id: `student-${field.name}`,
+      value,
+      disabled: saving,
+      onChange: (event) => onChange(event.target.value),
+      style: inputStyle(field.name)
+    };
+
+    if (field.options) {
+      return (
+        <select {...common}>
+          {field.options.map(([optionValue, text]) => (
+            <option key={optionValue} value={optionValue}>{text}</option>
+          ))}
+        </select>
+      );
+    }
+
+    if (field.multiline) {
+      return <textarea {...common} rows={2} maxLength={field.max} onKeyDown={multilineKeyDown} />;
+    }
+
+    return (
+      <input
+        {...common}
+        type={field.type || "text"}
+        inputMode={field.name === "birthYear" || field.name === "tuitionFee" ? "numeric" : undefined}
+        maxLength={field.max}
+        required={field.required}
+        dir={field.ltr || field.type === "date" ? "ltr" : "rtl"}
+      />
+    );
+  }
+
+  function fieldNotes(field) {
+    return (
+      <>
+        {fieldError?.name === field.name && (
+          <small role="alert" style={{ color: "#dc2626" }}>{fieldError.message}</small>
+        )}
+        {serverValues && field.name in serverValues && (
+          <small style={{ color: "#b45309" }}>
+            القيمة الحالية: {displayOption(field, serverValues[field.name])}
+          </small>
+        )}
+      </>
+    );
+  }
+
+  const enrollmentFields = [
+    {
+      name: "classId",
+      label: "الشعبة",
+      options: [["", "— اختر الشعبة —"], ...options.classes.map((c) => [String(c.id), classLabel(c) + (c.teacherName ? ` — ${c.teacherName}` : "")])]
+    },
+    {
+      name: "attendanceType",
+      label: "نوع الدوام",
+      options: [["", "غير محدد"], ...Object.entries(ATTENDANCE_TYPES)]
+    },
+    {
+      name: "paymentPlan",
+      label: "طريقة الدفع",
+      options: [["", "غير محدد"], ...Object.entries(PAYMENT_PLANS)]
+    },
+    { name: "tuitionFee", label: "المبلغ الإجمالي (د.ع)", max: 20, ltr: true },
+    { name: "enrollmentDate", label: "تاريخ المباشرة", type: "date" }
+  ];
 
   return (
     <dialog
@@ -260,46 +424,37 @@ export default function StudentDialog({
         requestClose();
       }}
       style={{
-        width: "min(760px, 95vw)",
-        maxHeight: "92vh",
+        width: "min(860px, 96vw)",
+        maxHeight: "94vh",
         padding: 0,
         border: "none",
         borderRadius: "14px",
         boxShadow: "0 20px 60px rgba(15, 23, 42, 0.3)"
       }}
     >
-      <div style={{ padding: "22px" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "16px",
-            flexWrap: "wrap",
-            marginBottom: "18px"
-          }}
-        >
-          <StudentPhoto student={student} size={88} />
+      <div style={{ padding: "20px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+          <StudentPhoto student={student} size={84} />
 
-          <div style={{ flex: 1, minWidth: "180px" }}>
-            <h2 style={{ margin: "0 0 8px", color: "#1e40af" }}>
-              {student.firstName} {student.lastName}
-            </h2>
+          <div style={{ flex: 1, minWidth: "200px" }}>
+            <h2 style={{ margin: "0 0 2px", color: "#1e40af" }}>{fullName(student)}</h2>
+            <div style={{ color: "#64748b", marginBottom: "8px" }}>
+              {student.studentCode}
+              {cls && ` — ${classLabel(cls)}`}
+              {cls?.teacherName && ` — المرشدة: ${cls.teacherName}`}
+            </div>
 
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <label
                 style={{
-                  padding: "7px 14px",
+                  padding: "6px 14px",
                   backgroundColor: "#eff6ff",
                   color: "#1e40af",
                   borderRadius: "6px",
                   cursor: photoBusy ? "wait" : "pointer"
                 }}
               >
-                {photoBusy
-                  ? "جارٍ الحفظ..."
-                  : student.photo
-                    ? "تغيير الصورة"
-                    : "إضافة صورة"}
+                {photoBusy ? "جارٍ الحفظ..." : student.photo ? "تغيير الصورة" : "إضافة صورة"}
                 <input
                   type="file"
                   accept="image/*"
@@ -313,11 +468,7 @@ export default function StudentDialog({
               </label>
 
               {student.photo && (
-                <button
-                  type="button"
-                  onClick={removePhoto}
-                  disabled={photoBusy}
-                >
+                <button type="button" onClick={removePhoto} disabled={photoBusy}>
                   حذف الصورة
                 </button>
               )}
@@ -325,92 +476,76 @@ export default function StudentDialog({
           </div>
         </div>
 
-        <form
-          id={`student-form-${student.id}`}
-          onSubmit={save}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-            gap: "12px 16px"
-          }}
-        >
-          {fields.map((field) => {
-            const { name, label } = field;
+        <form id={formId} onSubmit={save}>
+          {(form.reviewNote || original.reviewNote) && (
+            <div
+              style={{
+                marginTop: "14px",
+                padding: "10px 12px",
+                backgroundColor: "#fffbeb",
+                border: "1px solid #fcd34d",
+                borderRadius: "8px"
+              }}
+            >
+              <label style={labelStyle(true)}>
+                <span style={{ color: "#92400e", fontWeight: 600 }}>⚠ بحاجة إلى مراجعة</span>
+                <textarea
+                  id="student-reviewNote"
+                  value={form.reviewNote}
+                  disabled={saving}
+                  rows={2}
+                  maxLength={1000}
+                  onKeyDown={multilineKeyDown}
+                  onChange={(event) => setForm((p) => ({ ...p, reviewNote: event.target.value }))}
+                  style={inputStyle("reviewNote")}
+                />
+              </label>
+              {form.reviewNote && (
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, reviewNote: "" }))}
+                  style={{ marginTop: "6px" }}
+                >
+                  ✓ تمت المراجعة
+                </button>
+              )}
+            </div>
+          )}
 
-            const common = {
-              id: `student-${name}`,
-              value: form[name],
-              disabled: saving,
-              onChange: (event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  [name]: event.target.value
-                })),
-              style: inputStyle(name)
-            };
-
-            return (
-              <label
-                key={name}
-                style={{
-                  display: "grid",
-                  gap: "4px",
-                  gridColumn: field.multiline ? "1 / -1" : undefined,
-                  fontSize: "13px",
-                  color: "#475569"
-                }}
-              >
+          <h3 style={sectionTitle}>بيانات الطفل</h3>
+          <div style={grid}>
+            {fields.map((field) => (
+              <label key={field.name} style={labelStyle(field.multiline)}>
                 <span>
-                  {label}
+                  {field.label}
                   {field.required && <span style={{ color: "#dc2626" }}> *</span>}
                 </span>
-
-                {field.options ? (
-                  <select {...common}>
-                    {field.options.map(([value, text]) => (
-                      <option key={value} value={value}>
-                        {text}
-                      </option>
-                    ))}
-                  </select>
-                ) : field.multiline ? (
-                  <textarea
-                    {...common}
-                    rows={2}
-                    maxLength={field.max}
-                    onKeyDown={multilineKeyDown}
-                  />
-                ) : (
-                  <input
-                    {...common}
-                    type={field.type || "text"}
-                    maxLength={field.max}
-                    required={field.required}
-                    dir={field.ltr || field.type === "date" ? "ltr" : "rtl"}
-                  />
+                {fieldControl(field, form[field.name], (value) =>
+                  setForm((previous) => ({ ...previous, [field.name]: value }))
                 )}
-
-                {fieldError?.name === name && (
-                  <small role="alert" style={{ color: "#dc2626" }}>
-                    {fieldError.message}
-                  </small>
-                )}
-
-                {serverValues && name in serverValues && (
-                  <small style={{ color: "#b45309" }}>
-                    القيمة الحالية: {displayOption(field, serverValues[name])}
-                  </small>
-                )}
+                {fieldNotes(field)}
               </label>
-            );
-          })}
+            ))}
+          </div>
+
+          <h3 style={sectionTitle}>التسجيل والرسوم</h3>
+          <div style={grid}>
+            {enrollmentFields.map((field) => (
+              <label key={field.name} style={labelStyle(false)}>
+                <span>{field.label}</span>
+                {fieldControl(field, enroll[field.name], (value) =>
+                  setEnroll((previous) => ({ ...previous, [field.name]: value }))
+                )}
+                {fieldNotes(field)}
+              </label>
+            ))}
+          </div>
         </form>
 
-        {/* Outside the form above: ParentLinkCell renders its own form. */}
-        <h3 style={{ margin: "20px 0 8px", color: "#1e40af", fontSize: "16px" }}>
-          الوالدان
-        </h3>
+        {/* Outside the form above: these render forms of their own. */}
+        <Payments student={student} onSaved={onSaved} disabled={saving} />
 
+        <h3 style={sectionTitle}>الوالدان</h3>
         <div
           style={{
             display: "grid",
@@ -424,15 +559,9 @@ export default function StudentDialog({
           ].map(([relation, key, label]) => (
             <div
               key={relation}
-              style={{
-                padding: "10px",
-                border: "1px solid #e2e8f0",
-                borderRadius: "8px"
-              }}
+              style={{ padding: "10px", border: "1px solid #e2e8f0", borderRadius: "8px" }}
             >
-              <div style={{ fontSize: "13px", color: "#475569", marginBottom: "6px" }}>
-                {label}
-              </div>
+              <div style={{ fontSize: "13px", color: "#475569", marginBottom: "6px" }}>{label}</div>
               <ParentLinkCell
                 studentId={student.id}
                 relation={relation}
@@ -445,30 +574,31 @@ export default function StudentDialog({
         </div>
 
         {error && (
-          <p role="alert" style={{ color: "#dc2626" }}>
-            {error}
-          </p>
+          <p role="alert" style={{ color: "#dc2626" }}>{error}</p>
         )}
 
         <div
           style={{
+            position: "sticky",
+            bottom: "-20px",
             display: "flex",
             gap: "10px",
-            justifyContent: "flex-start",
-            marginTop: "20px"
+            marginTop: "18px",
+            padding: "12px 0",
+            backgroundColor: "#ffffff",
+            borderTop: "1px solid #e2e8f0"
           }}
         >
           <button
             type="submit"
-            form={`student-form-${student.id}`}
+            form={formId}
             disabled={saving}
             style={{
-              padding: "10px 26px",
+              padding: "10px 28px",
               backgroundColor: "#2563eb",
               color: "#ffffff",
               border: "none",
               borderRadius: "8px",
-              fontFamily: "inherit",
               cursor: saving ? "wait" : "pointer"
             }}
           >
@@ -479,17 +609,164 @@ export default function StudentDialog({
             type="button"
             onClick={requestClose}
             disabled={saving}
-            style={{
-              padding: "10px 20px",
-              borderRadius: "8px",
-              fontFamily: "inherit"
-            }}
+            style={{ padding: "10px 20px", borderRadius: "8px" }}
           >
             إغلاق
           </button>
         </div>
       </div>
     </dialog>
+  );
+}
+
+// الدفعات: each payment is saved immediately, separately from the form.
+function Payments({ student, onSaved, disabled }) {
+  const [draft, setDraft] = useState({ amount: "", paymentType: "TUITION", description: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const enrollment = student.enrollment;
+  const { tuitionFee, totalPaid, remaining, curriculumPaid } = student.financial;
+
+  async function add(event) {
+    event.preventDefault();
+    if (busy) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      const { response, data } = await send(`/api/students/${student.id}/payments`, "POST", draft);
+      if (!response.ok) throw new Error(data.error || "تعذر حفظ الدفعة.");
+
+      onSaved(data.student);
+      setDraft({ amount: "", paymentType: draft.paymentType, description: "" });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(payment) {
+    if (!window.confirm(`حذف دفعة بمبلغ ${formatMoney(payment.amount)} د.ع؟`)) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      const { response, data } = await send(`/api/payments/${payment.id}`, "DELETE");
+      if (!response.ok) throw new Error(data.error || "تعذر حذف الدفعة.");
+      onSaved(data.student);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const summary = [
+    ["المبلغ الإجمالي", tuitionFee],
+    ["الواصل", totalPaid, "#15803d"],
+    ["الباقي", remaining, remaining > 0 ? "#b91c1c" : undefined],
+    ["المنهج والزي", curriculumPaid]
+  ];
+
+  const cell = { padding: "6px 8px", borderBottom: "1px solid #f1f5f9", textAlign: "right" };
+  const control = { padding: "7px", border: "1px solid #cbd5e1", borderRadius: "6px", backgroundColor: "#fff" };
+
+  return (
+    <>
+      <h3 style={{ margin: "18px 0 8px", color: "#1e40af", fontSize: "16px" }}>الدفعات</h3>
+
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+        {summary.map(([label, value, color]) => (
+          <div key={label} style={{ padding: "8px 14px", backgroundColor: "#f8fafc", borderRadius: "8px" }}>
+            <div style={{ fontSize: "12px", color: "#64748b" }}>{label}</div>
+            <strong style={{ color }}>{formatMoney(value)}</strong>
+          </div>
+        ))}
+      </div>
+
+      {!enrollment ? (
+        <p style={{ color: "#64748b" }}>اختر الشعبة واحفظ أولاً لتسجيل الدفعات.</p>
+      ) : (
+        <>
+          {enrollment.payments.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+                <thead>
+                  <tr style={{ color: "#64748b" }}>
+                    <th style={cell}>التاريخ</th>
+                    <th style={cell}>النوع</th>
+                    <th style={{ ...cell, textAlign: "left" }}>المبلغ</th>
+                    <th style={cell}>الفترة / ملاحظة</th>
+                    <th style={cell} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {enrollment.payments.map((payment) => (
+                    <tr key={payment.id}>
+                      <td style={cell}>{formatDate(payment.paymentDate)}</td>
+                      <td style={cell}>{PAYMENT_TYPES[payment.paymentType] || "قسط"}</td>
+                      <td style={{ ...cell, textAlign: "left" }}>{formatMoney(payment.amount)}</td>
+                      <td style={cell}>{payment.description || ""}</td>
+                      <td style={cell}>
+                        <button
+                          type="button"
+                          aria-label="حذف الدفعة"
+                          disabled={busy || disabled}
+                          onClick={() => remove(payment)}
+                          style={{ color: "#b91c1c" }}
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <form onSubmit={add} style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+            <input
+              aria-label="مبلغ الدفعة"
+              placeholder="المبلغ"
+              inputMode="numeric"
+              dir="ltr"
+              required
+              value={draft.amount}
+              onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
+              style={{ ...control, width: "130px" }}
+            />
+            <select
+              aria-label="نوع الدفعة"
+              value={draft.paymentType}
+              onChange={(e) => setDraft((d) => ({ ...d, paymentType: e.target.value }))}
+              style={control}
+            >
+              {Object.entries(PAYMENT_TYPES).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <input
+              aria-label="الفترة أو ملاحظة"
+              placeholder="الفترة المدفوعة أو ملاحظة"
+              maxLength={500}
+              value={draft.description}
+              onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+              style={{ ...control, flex: "1 1 200px" }}
+            />
+            <button type="submit" disabled={busy || disabled}>
+              {busy ? "جارٍ الحفظ..." : "+ إضافة دفعة"}
+            </button>
+          </form>
+        </>
+      )}
+
+      {error && <p role="alert" style={{ color: "#dc2626" }}>{error}</p>}
+    </>
   );
 }
 

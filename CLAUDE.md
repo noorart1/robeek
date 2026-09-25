@@ -4,9 +4,11 @@ Guidance for Claude Code (and new developers) working in this repository.
 
 ## What this is
 
-An Arabic-language school / kindergarten administration system: student records,
-parent (guardian) records, and the link between them. Single admin-facing
-dashboard, no public-facing pages beyond login.
+An Arabic-language administration system for **Robeek (روبيك للتعليم المبكر)**,
+an early-learning centre in Kufa/Najaf, Iraq: children, parents, sections
+(morning/evening shifts × sections A–F), fees and payments in Iraqi dinars,
+and school-bus lines. Single admin-facing dashboard, no public-facing pages
+beyond login.
 
 **Stack:** Next.js 15 (App Router) · React 19 · Prisma 6 · MySQL · bcryptjs.
 Custom `server.js` entry point, not `next start`.
@@ -80,6 +82,42 @@ Verify before walking away: curl the routes, confirm `stderr.log` did not grow,
 and check that `.next/BUILD_ID` actually changed. Remove `.next.rollback` once
 satisfied.
 
+### Schema changes
+
+The project does not use `prisma migrate`. Schema changes are hand-written
+SQL in `prisma/manual-migrations/` (tracked despite the `*.sql` ignore rule),
+applied once per database after a backup, with `schema.prisma` edited to
+match. **`npm run build` does not run `prisma generate`** — after pulling a
+schema change, run it explicitly, or the server keeps the old client and
+every new field fails at runtime:
+
+```
+mysqldump <db> > ~/backups/before-<migration>.sql
+mysql <db> < prisma/manual-migrations/<file>.sql
+npx prisma generate
+npm run build
+```
+
+To confirm `schema.prisma` matches a database, diff it against
+`npx prisma db pull --print` (ignore table-name case on Windows).
+
+### Importing the Robeek workbook
+
+The school keeps its enrollment list in Excel (`*.xlsx`, gitignored — it holds
+children's personal data). Two steps, both re-runnable:
+
+```
+python scripts/robeek-xlsx-to-json.py robeek_students_data.xlsx /tmp/robeek.json
+node scripts/import-robeek.js /tmp/robeek.json            # dry run: report only
+node scripts/import-robeek.js /tmp/robeek.json --replace  # wipes and imports
+```
+
+`--replace` deletes every student, parent, enrollment, payment, class,
+academic year and transport line first, and refuses to run while any student
+has a photo. The importer never silently corrects data: incomplete phones,
+possible duplicates and missing fees go into `Student.reviewNote`, shown in
+the table as ⚠ with a "needs review" filter. Delete the JSON afterwards.
+
 Host address, SSH user, and concrete paths live in **`CLAUDE.local.md`**, which
 is gitignored. Credentials — the SSH key and the database password — live in
 neither file: use a password manager, and keep `.env` gitignored.
@@ -134,6 +172,15 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
   field at once by PATCHing `{ fields: {...}, updatedAt }`. The server
   validates each field with the same `validateField` as single-cell edits and
   saves all of them in one conditional update.
+- Names are Iraqi triple names: `firstName` + `fatherName` +
+  `grandfatherName`, with `lastName` (laqab) optional. Always display them
+  with `fullName()` from `lib/labels.js`. Parent names are optional too
+  (mothers are often known by phone only) — use `parentName()`.
+- Money columns (fee, paid, remaining, curriculum) are read-only in the table
+  and come from `formatStudent` in `lib/student-data.js`: `totalPaid` counts
+  TUITION payments only, CURRICULUM payments are reported separately.
+  Section, fee and attendance type are edited in the dialog, which saves them
+  through `PUT /api/students/[id]/enrollment`.
 - Search goes through `matchesSearch` in `lib/arabic.js`, which folds
   أ/إ/آ→ا, ة→ه, ى/ی→ي, tashkeel, and Arabic-Indic digits. Use it for any new
   search box.

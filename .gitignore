@@ -45,3 +45,6 @@ uploads/
 # Local configuration
 .npmrc
 CLAUDE.local.md
+
+# Hand-written schema migrations are code, unlike database dumps
+!prisma/manual-migrations/*.sql

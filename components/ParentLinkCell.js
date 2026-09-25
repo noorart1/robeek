@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import EditableCell from "./EditableCell";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 import { matchesSearch } from "../lib/arabic";
+import { parentName } from "../lib/labels";
 
 export default function ParentLinkCell({studentId, relation, parent, onChanged, onEditingChange}) {
   const [open, setOpen] = useState(false);
@@ -52,13 +53,16 @@ export default function ParentLinkCell({studentId, relation, parent, onChanged, 
     } catch(e) {setError(e.message)} finally {setBusy(false)}
   }
   if (parent) {
-    const fullName = [parent.firstName, parent.lastName].filter(Boolean).join(" ");
+    // Mothers imported from the workbook have a phone number but no name.
+    const fullName = parentName(parent);
     return (
       <div style={{minWidth:170}}>
         <button type="button" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}
           style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:0,background:"none",border:"none",font:"inherit",color:"inherit",textAlign:"right",cursor:"pointer"}}>
-          <span style={{fontWeight:600}}>{fullName || "—"}</span>
-          {!expanded && parent.phone && <small dir="ltr" style={{color:"#64748b"}}>{parent.phone}</small>}
+          {fullName
+            ? <span style={{fontWeight:600}}>{fullName}</span>
+            : <span dir="ltr" style={{fontWeight:600}}>{parent.phone || "—"}</span>}
+          {!expanded && fullName && parent.phone && <small dir="ltr" style={{color:"#64748b"}}>{parent.phone}</small>}
           <span style={{marginInlineStart:"auto",color:"#2563eb",fontSize:11}}>{expanded ? "▲" : "▼"}</span>
         </button>
         {expanded && (
@@ -77,7 +81,7 @@ export default function ParentLinkCell({studentId, relation, parent, onChanged, 
     );
   }
   if (!open) return <button type="button" onClick={()=>{setOpen(true);onEditingChange?.(true)}}>+ {relation === "FATHER" ? "إضافة الأب" : "إضافة الأم"}</button>;
-  const shown = list.filter(p => matchesSearch(`${p.firstName} ${p.lastName} ${p.phone || ""}`, filter));
+  const shown = list.filter(p => matchesSearch(`${parentName(p)} ${p.phone || ""}`, filter));
   return <form onSubmit={submit} onKeyDown={e=>{if(e.key==="Escape"&&!busy){e.preventDefault();e.stopPropagation();close()}}} style={{minWidth:230,display:"grid",gap:6}}>
     <select aria-label="طريقة الربط" value={mode} onChange={e=>{setMode(e.target.value);setError("")}}>
       <option value="new">إنشاء ولي أمر جديد</option><option value="existing">ربط ولي أمر مسجل</option>
@@ -85,10 +89,10 @@ export default function ParentLinkCell({studentId, relation, parent, onChanged, 
     {mode === "existing" ? <>
       <input aria-label="البحث عن ولي أمر" placeholder="ابحث بالاسم أو الهاتف..." value={filter} autoFocus onChange={e=>{setFilter(e.target.value);setSelected("")}}/>
       <select aria-label="ولي الأمر" required size={Math.min(6, Math.max(2, shown.length))} value={selected} onChange={e=>setSelected(e.target.value)}>
-        {shown.map(p=><option key={p.id} value={p.id}>{p.firstName} {p.lastName} — {p.phone || "بدون هاتف"} (#{p.id})</option>)}
+        {shown.map(p=><option key={p.id} value={p.id}>{parentName(p) || "بدون اسم"} — {p.phone || "بدون هاتف"} (#{p.id})</option>)}
       </select>
       <small style={{color:"#64748b"}}>{shown.length ? `${shown.length} نتيجة` : "لا توجد نتائج"}</small>
-    </> : [ ["firstName","الاسم"],["lastName","اللقب"],["phone","الهاتف"] ].map(([field,label],i)=><input key={field} aria-label={label} placeholder={label} autoFocus={i===0} dir={field==="phone"?"ltr":undefined} required={field!=="phone"} maxLength={field==="phone"?30:100} value={form[field]} onChange={e=>setForm(prev=>({...prev,[field]:e.target.value}))}/>)}
+    </> : [ ["firstName","الاسم"],["lastName","اللقب"],["phone","الهاتف"] ].map(([field,label],i)=><input key={field} aria-label={label} placeholder={label} autoFocus={i===0} dir={field==="phone"?"ltr":undefined} maxLength={field==="phone"?30:100} value={form[field]} onChange={e=>setForm(prev=>({...prev,[field]:e.target.value}))}/>)}
     {error && <small role="alert" style={{color:"#b91c1c"}}>{error}</small>}
     <div><button disabled={busy || (mode==="existing" && !selected)} type="submit">{busy?"جارٍ الحفظ...":"حفظ"}</button> <button type="button" disabled={busy} onClick={close}>إلغاء</button></div>
   </form>;

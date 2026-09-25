@@ -2,82 +2,16 @@
 import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
 import { toWesternDigits } from "../../../lib/digits";
+import {
+  formatStudent,
+  loadStudent,
+  studentSelect
+} from "../../../lib/student-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// اطلاعات کودک و ارتباطات او
-
-const studentSelect = {
-  id: true,
-  studentCode: true,
-  firstName: true,
-  lastName: true,
-  fatherName: true,
-  nationalId: true,
-  birthDate: true,
-  gender: true,
-  phone: true,
-  address: true,
-  emergencyPhone: true,
-  photo: true,
-  notes: true,
-  status: true,
-  updatedAt: true,
-
-  StudentParent: {
-    select: {
-      relation: true,
-      Parent: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          phone: true,
-          phone2: true,
-          address: true,
-          updatedAt: true
-        }
-      }
-    }
-  },
-
-  Enrollment: {
-    select: {
-      id: true,
-      enrollmentDate: true,
-      status: true,
-      tuitionFee: true,
-
-      AcademicYear: {
-        select: {
-          id: true,
-          name: true,
-          isActive: true
-        }
-      },
-
-      Class: {
-        select: {
-          id: true,
-          name: true,
-          grade: true,
-          shift: true
-        }
-      },
-
-      Payment: {
-        select: {
-          id: true,
-          amount: true,
-          paymentDate: true,
-          paymentType: true,
-          receiptNo: true
-        }
-      }
-    }
-  }
-};
+const SHIFT_LETTER = { MORNING: "M", EVENING: "E" };
 
 // بررسی دسترسی مدیر
 
@@ -90,99 +24,11 @@ async function checkAdmin() {
   );
 }
 
-// تبدیل اطلاعات کودک به ساختار جدول جامع
-
-function formatStudent(student) {
-
-  const {
-    StudentParent,
-    Enrollment,
-    ...studentData
-  } = student;
-
-  // شناسایی پدر و مادر
-
-  const fatherRelation = StudentParent.find(
-    item => item.relation === "FATHER"
+function jsonError(message, status) {
+  return Response.json(
+    { error: message },
+    { status, headers: { "Cache-Control": "no-store" } }
   );
-
-  const motherRelation = StudentParent.find(
-    item => item.relation === "MOTHER"
-  );
-
-  const father = fatherRelation?.Parent || null;
-  const mother = motherRelation?.Parent || null;
-
-  // مرتب‌سازی ثبت‌نام‌ها
-
-  const enrollments = [...Enrollment].sort(
-    (a, b) => {
-      if (
-        a.AcademicYear.isActive !==
-        b.AcademicYear.isActive
-      ) {
-        return a.AcademicYear.isActive ? -1 : 1;
-      }
-
-      return b.id - a.id;
-    }
-  );
-
-  // ثبت‌نام سال تحصیلی فعال در اولویت است
-
-  const currentEnrollment =
-    enrollments[0] || null;
-
-  let totalPaid = 0;
-  let tuitionFee = 0;
-
-  if (currentEnrollment) {
-
-    tuitionFee = Number(
-      currentEnrollment.tuitionFee
-    );
-
-    totalPaid = currentEnrollment.Payment.reduce(
-      (sum, payment) =>
-        sum + Number(payment.amount),
-      0
-    );
-  }
-
-  const remaining =
-    tuitionFee - totalPaid;
-
-  return {
-    ...studentData,
-
-    father,
-    mother,
-
-    enrollment: currentEnrollment
-      ? {
-          id: currentEnrollment.id,
-
-          enrollmentDate:
-            currentEnrollment.enrollmentDate,
-
-          status:
-            currentEnrollment.status,
-
-          academicYear:
-            currentEnrollment.AcademicYear,
-
-          class:
-            currentEnrollment.Class
-        }
-      : null,
-
-    financial: {
-      tuitionFee,
-      totalPaid,
-      remaining,
-      currency: "IQD"
-    }
-  };
 }
 
 // دریافت فهرست کودکان
@@ -190,64 +36,51 @@ function formatStudent(student) {
 export async function GET() {
   try {
 
-    const authorized = await checkAdmin();
-
-    if (!authorized) {
-      return Response.json(
-        {
-          error: "ليس لديك صلاحية الوصول."
-        },
-        {
-          status: 401,
-          headers: {
-            "Cache-Control": "no-store"
-          }
-        }
-      );
+    if (!(await checkAdmin())) {
+      return jsonError("ليس لديك صلاحية الوصول.", 401);
     }
 
     const students = await prisma.student.findMany({
       select: studentSelect,
-
-      orderBy: {
-        id: "desc"
-      }
+      orderBy: { id: "asc" }
     });
 
-    const formattedStudents =
-      students.map(formatStudent);
-
     return Response.json(
-      {
-        students: formattedStudents
-      },
-      {
-        headers: {
-          "Cache-Control": "no-store"
-        }
-      }
+      { students: students.map(formatStudent) },
+      { headers: { "Cache-Control": "no-store" } }
     );
 
   } catch (error) {
 
-    console.error(
-      "Students GET error:",
-      error
-    );
+    console.error("Students GET error:", error);
 
-    return Response.json(
-      {
-        error:
-          "حدث خطأ أثناء تحميل بيانات الأطفال."
-      },
-      {
-        status: 500,
-        headers: {
-          "Cache-Control": "no-store"
-        }
-      }
-    );
+    return jsonError("حدث خطأ أثناء تحميل بيانات الأطفال.", 500);
   }
+}
+
+// Next free code for a section, following the imported pattern M-A-07;
+// children without a section get S-001, S-002, ...
+async function nextStudentCode(tx, cls) {
+  const prefix = cls ? `${SHIFT_LETTER[cls.shift] || "X"}-${cls.name}-` : "S-";
+  const width = cls ? 2 : 3;
+
+  const taken = await tx.student.findMany({
+    where: { studentCode: { startsWith: prefix } },
+    select: { studentCode: true }
+  });
+
+  const highest = taken.reduce((max, { studentCode }) => {
+    const number = Number(studentCode.slice(prefix.length));
+    return Number.isInteger(number) && number > max ? number : max;
+  }, 0);
+
+  return prefix + String(highest + 1).padStart(width, "0");
+}
+
+function optionalText(value, limit) {
+  if (value === undefined || value === null) return { value: null };
+  if (typeof value !== "string" || value.length > limit) return { error: true };
+  return { value: value.trim() || null };
 }
 
 // ثبت کودک جدید
@@ -255,15 +88,8 @@ export async function GET() {
 export async function POST(request) {
   try {
 
-    const authorized = await checkAdmin();
-
-    if (!authorized) {
-      return Response.json(
-        {
-          error: "ليس لديك صلاحية الوصول."
-        },
-        { status: 401 }
-      );
+    if (!(await checkAdmin())) {
+      return jsonError("ليس لديك صلاحية الوصول.", 401);
     }
 
     let body;
@@ -271,105 +97,89 @@ export async function POST(request) {
     try {
       body = await request.json();
     } catch {
-      return Response.json(
-        {
-          error: "البيانات المرسلة غير صالحة."
-        },
-        { status: 400 }
-      );
+      return jsonError("البيانات المرسلة غير صالحة.", 400);
     }
+
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return jsonError("البيانات المرسلة غير صالحة.", 400);
+    }
+
+    const code = optionalText(body.studentCode, 50);
+    const firstName = optionalText(body.firstName, 100);
+    const fatherName = optionalText(body.fatherName, 100);
+    const grandfatherName = optionalText(body.grandfatherName, 100);
+    const lastName = optionalText(body.lastName, 100);
 
     if (
-      !body ||
-      typeof body !== "object" ||
-      Array.isArray(body)
+      [code, firstName, fatherName, grandfatherName, lastName].some((f) => f.error) ||
+      !firstName.value
     ) {
-      return Response.json(
-        {
-          error: "البيانات المرسلة غير صالحة."
-        },
-        { status: 400 }
-      );
+      return jsonError("يرجى إدخال اسم الطفل.", 400);
     }
 
-    const studentCode =
-      typeof body.studentCode === "string"
-        ? toWesternDigits(body.studentCode.trim())
-        : "";
+    let classId = null;
 
-    const firstName =
-      typeof body.firstName === "string"
-        ? body.firstName.trim()
-        : "";
+    if (body.classId !== undefined && body.classId !== null && body.classId !== "") {
+      classId = Number(body.classId);
 
-    const lastName =
-      typeof body.lastName === "string"
-        ? body.lastName.trim()
-        : "";
-
-    if (
-      !studentCode ||
-      !firstName ||
-      !lastName ||
-      studentCode.length > 50 ||
-      firstName.length > 100 ||
-      lastName.length > 100
-    ) {
-      return Response.json(
-        {
-          error:
-            "رمز الطفل والاسم واللقب حقول مطلوبة."
-        },
-        { status: 400 }
-      );
+      if (!Number.isSafeInteger(classId) || classId <= 0) {
+        return jsonError("الشعبة المحددة غير صالحة.", 400);
+      }
     }
 
-    const student = await prisma.student.create({
-      data: {
-        studentCode,
-        firstName,
-        lastName,
-        updatedAt: new Date()
-      },
+    const id = await prisma.$transaction(async (tx) => {
+      const cls = classId
+        ? await tx.class.findUnique({ where: { id: classId } })
+        : null;
 
-      select: studentSelect
+      if (classId && !cls) {
+        throw Object.assign(new Error("class"), { code: "NO_CLASS" });
+      }
+
+      const student = await tx.student.create({
+        data: {
+          studentCode: code.value
+            ? toWesternDigits(code.value)
+            : await nextStudentCode(tx, cls),
+          firstName: firstName.value,
+          fatherName: fatherName.value,
+          grandfatherName: grandfatherName.value,
+          lastName: lastName.value,
+          updatedAt: new Date()
+        },
+        select: { id: true }
+      });
+
+      if (cls) {
+        await tx.enrollment.create({
+          data: {
+            studentId: student.id,
+            classId: cls.id,
+            academicYearId: cls.academicYearId
+          }
+        });
+      }
+
+      return student.id;
     });
 
     return Response.json(
-      {
-        student: formatStudent(student)
-      },
-      {
-        status: 201,
-        headers: {
-          "Cache-Control": "no-store"
-        }
-      }
+      { student: await loadStudent(id) },
+      { status: 201, headers: { "Cache-Control": "no-store" } }
     );
 
   } catch (error) {
 
-    if (error.code === "P2002") {
-      return Response.json(
-        {
-          error:
-            "رمز الطفل مسجل مسبقاً."
-        },
-        { status: 409 }
-      );
+    if (error.code === "NO_CLASS") {
+      return jsonError("الشعبة المحددة غير موجودة.", 400);
     }
 
-    console.error(
-      "Students POST error:",
-      error
-    );
+    if (error.code === "P2002") {
+      return jsonError("رمز الطفل مسجل مسبقاً.", 409);
+    }
 
-    return Response.json(
-      {
-        error:
-          "حدث خطأ أثناء تسجيل الطفل."
-      },
-      { status: 500 }
-    );
+    console.error("Students POST error:", error);
+
+    return jsonError("حدث خطأ أثناء تسجيل الطفل.", 500);
   }
 }

@@ -29,6 +29,8 @@ const limits = {
   firstName: 100,
   lastName: 100,
   fatherName: 100,
+  grandfatherName: 100,
+  birthYear: 4,
   nationalId: 30,
   phone: 30,
   phone2: 30,
@@ -299,7 +301,10 @@ export default function EditableCell({
           dir={
             type === "date" ||
             field === "nationalId" ||
+            field === "studentCode" ||
+            field === "birthYear" ||
             field === "phone" ||
+            field === "phone2" ||
             field === "emergencyPhone"
               ? "ltr"
               : "rtl"

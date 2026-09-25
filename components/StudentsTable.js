@@ -8,20 +8,40 @@ import StudentDialog from "./StudentDialog";
 import StudentPhoto from "./StudentPhoto";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 import { formatDate, matchesSearch } from "../lib/arabic";
+import {
+  SHIFTS,
+  attendanceLabel,
+  classLabel,
+  formatMoney,
+  fullName,
+  parentName
+} from "../lib/labels";
 
+// kind: "edit" = inline EditableCell, "parent" = ParentLinkCell,
+// "view" = read-only (edited in the full dialog), "money" = read-only amount.
 const columns = [
-  { field: "studentCode", label: "رمز الطفل" },
+  { field: "studentCode", label: "الرمز", kind: "edit" },
+  { field: "class", label: "الشعبة", kind: "view", value: (s) => classLabel(s.enrollment?.class) },
+  { field: "birthYear", label: "المواليد", kind: "edit" },
   { field: "father", label: "الأب", kind: "parent", relation: "FATHER" },
   { field: "mother", label: "الأم", kind: "parent", relation: "MOTHER" },
-  { field: "nationalId", label: "الرقم الوطني" },
-  { field: "birthDate", label: "تاريخ الميلاد", type: "date" },
-  { field: "gender", label: "الجنس", type: "gender" },
-  { field: "phone", label: "رقم الهاتف" },
-  { field: "emergencyPhone", label: "هاتف الطوارئ" },
-  { field: "address", label: "عنوان السكن" },
-  { field: "notes", label: "ملاحظات" },
-  { field: "status", label: "الحالة", type: "status" }
+  { field: "address", label: "السكن", kind: "edit" },
+  { field: "attendance", label: "نوع الدوام", kind: "view", value: (s) => attendanceLabel(s.enrollment) },
+  { field: "tuitionFee", label: "المبلغ الإجمالي", kind: "money" },
+  { field: "totalPaid", label: "الواصل", kind: "money" },
+  { field: "remaining", label: "الباقي", kind: "money" },
+  { field: "curriculumPaid", label: "المنهج", kind: "money" },
+  { field: "line", label: "خط النقل", kind: "view", value: (s) => s.transportLine?.name || "" },
+  { field: "notes", label: "ملاحظات", kind: "edit" },
+  { field: "status", label: "الحالة", kind: "edit", type: "status" },
+  { field: "gender", label: "الجنس", kind: "edit", type: "gender" },
+  { field: "nationalId", label: "الرقم الوطني", kind: "edit" },
+  { field: "phone", label: "رقم الهاتف", kind: "edit" },
+  { field: "emergencyPhone", label: "هاتف الطوارئ", kind: "edit" },
+  { field: "birthDate", label: "تاريخ الميلاد", kind: "edit", type: "date" }
 ];
+
+const moneyFields = columns.filter((c) => c.kind === "money").map((c) => c.field);
 
 function displayValue(student, field) {
   const value = student[field];
@@ -30,28 +50,48 @@ function displayValue(student, field) {
     return value ? String(value).slice(0, 10) : "";
   }
 
-  return value ?? "";
+  return value === null || value === undefined ? "" : String(value);
+}
+
+// Morning before evening, then section, then code — the workbook's order.
+function compareStudents(a, b) {
+  const ca = a.enrollment?.class;
+  const cb = b.enrollment?.class;
+
+  if (!ca !== !cb) return ca ? -1 : 1;
+  if (ca && cb) {
+    if (ca.shift !== cb.shift) return ca.shift === "MORNING" ? -1 : 1;
+    if (ca.name !== cb.name) return ca.name.localeCompare(cb.name);
+  }
+
+  return a.studentCode.localeCompare(b.studentCode, "en", { numeric: true });
 }
 
 // Widths of the two columns pinned to the right edge while the table
 // scrolls sideways; the second one is offset by the first.
 const INDEX_WIDTH = 44;
-const NAME_WIDTH = 230;
+const NAME_WIDTH = 250;
 
-export default function StudentsTable() {
+const emptyForm = {
+  firstName: "",
+  fatherName: "",
+  grandfatherName: "",
+  classId: ""
+};
+
+export default function StudentsTable({ initialClassId = "", initialReview = false }) {
   const [students, setStudents] = useState([]);
+  const [options, setOptions] = useState({ classes: [], lines: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [shift, setShift] = useState("");
+  const [classId, setClassId] = useState(initialClassId);
+  const [reviewOnly, setReviewOnly] = useState(initialReview);
   const [lastSync, setLastSync] = useState(null);
   const [dialogId, setDialogId] = useState(null);
-
-  const [form, setForm] = useState({
-    studentCode: "",
-    firstName: "",
-    lastName: ""
-  });
+  const [form, setForm] = useState(emptyForm);
 
   const refreshInProgress = useRef(false);
   const mutationInProgress = useRef(false);
@@ -99,11 +139,15 @@ export default function StudentsTable() {
 
     async function initialLoad() {
       try {
-        const data = await fetchStudents();
+        const [data, optionsResponse] = await Promise.all([
+          fetchStudents(),
+          fetch("/api/options", { cache: "no-store" })
+        ]);
 
         if (!active) return;
 
         setStudents(data);
+        if (optionsResponse.ok) setOptions(await optionsResponse.json());
         setLastSync(new Date());
         setError("");
       } catch (err) {
@@ -206,17 +250,15 @@ export default function StudentsTable() {
       }
 
       setStudents((previous) => [
-        data.student,
         ...previous.filter(
           (student) => student.id !== data.student.id
-        )
+        ),
+        data.student
       ]);
 
-      setForm({
-        studentCode: "",
-        firstName: "",
-        lastName: ""
-      });
+      // Keep the chosen section: children are usually entered one class
+      // at a time.
+      setForm((previous) => ({ ...emptyForm, classId: previous.classId }));
 
       // Straight into the full form to fill in the rest of the details.
       setDialogId(data.student.id);
@@ -244,31 +286,54 @@ export default function StudentsTable() {
     setLastSync(new Date());
   }
 
-  const filteredStudents = students.filter((student) => {
-    const text = [
-      student.firstName,
-      student.lastName,
-      ...columns.map(({ field, kind }) =>
-        kind === "parent"
-          ? [student[field]?.firstName, student[field]?.lastName, student[field]?.phone].join(" ")
-          : field === "birthDate"
-            ? formatDate(student[field])
-            : displayValue(student, field)
-      )
-    ].join(" ");
+  const shownClasses = options.classes.filter((cls) => !shift || cls.shift === shift);
 
-    return matchesSearch(text, search);
-  });
+  const filteredStudents = students
+    .filter((student) => {
+      const cls = student.enrollment?.class;
+
+      if (shift && cls?.shift !== shift) return false;
+      if (classId && String(cls?.id) !== classId) return false;
+      if (reviewOnly && !student.reviewNote) return false;
+
+      const text = [
+        fullName(student),
+        ...columns.map((column) =>
+          column.kind === "parent"
+            ? [parentName(student[column.field]), student[column.field]?.phone].join(" ")
+            : column.value
+              ? column.value(student)
+              : column.kind === "money"
+                ? ""
+                : column.field === "birthDate"
+                  ? formatDate(student[column.field])
+                  : displayValue(student, column.field)
+        ),
+        student.reviewNote
+      ].join(" ");
+
+      return matchesSearch(text, search);
+    })
+    .sort(compareStudents);
+
+  const totals = Object.fromEntries(
+    moneyFields.map((field) => [
+      field,
+      filteredStudents.reduce((sum, s) => sum + (s.financial?.[field] || 0), 0)
+    ])
+  );
+
+  const reviewCount = students.filter((s) => s.reviewNote).length;
 
   const dialogStudent =
     dialogId && students.find((student) => student.id === dialogId);
 
   const cellStyle = {
     borderBottom: "1px solid #e2e8f0",
-    padding: "10px",
+    padding: "8px 10px",
     textAlign: "right",
     whiteSpace: "nowrap",
-    minWidth: "120px"
+    minWidth: "110px"
   };
 
   const headerStyle = {
@@ -279,6 +344,13 @@ export default function StudentsTable() {
     backgroundColor: "#eff6ff",
     color: "#1e40af",
     fontWeight: "bold"
+  };
+
+  const moneyStyle = {
+    ...cellStyle,
+    minWidth: "100px",
+    textAlign: "left",
+    fontVariantNumeric: "tabular-nums"
   };
 
   const pinned = (right, width) => ({
@@ -307,67 +379,141 @@ export default function StudentsTable() {
     boxShadow: "-3px 0 4px -2px rgba(15, 23, 42, 0.12)"
   };
 
+  const control = {
+    padding: "9px 10px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "6px",
+    backgroundColor: "#ffffff"
+  };
+
+  function renderCell(student, column) {
+    if (column.kind === "parent") {
+      return (
+        <ParentLinkCell
+          studentId={student.id}
+          relation={column.relation}
+          parent={student[column.field]}
+          onChanged={reloadAfterFamilyChange}
+          onEditingChange={editingChanged}
+        />
+      );
+    }
+
+    if (column.kind === "view") {
+      return (
+        <button
+          type="button"
+          onClick={() => setDialogId(student.id)}
+          title="التعديل من نافذة بيانات الطفل"
+          style={{ background: "none", border: "none", padding: "8px", cursor: "pointer", color: "inherit" }}
+        >
+          {column.value(student) || "—"}
+        </button>
+      );
+    }
+
+    return (
+      <EditableCell
+        studentId={student.id}
+        field={column.field}
+        type={column.type || "text"}
+        value={displayValue(student, column.field)}
+        updatedAt={student.updatedAt}
+        onSaved={handleStudentSaved}
+        onEditingChange={editingChanged}
+      />
+    );
+  }
+
+  function moneyCell(student, field) {
+    const value = student.financial?.[field] || 0;
+    const color =
+      field === "remaining" && value > 0
+        ? "#b91c1c"
+        : field === "totalPaid" && value > 0
+          ? "#15803d"
+          : undefined;
+
+    return (
+      <td key={field} style={{ ...moneyStyle, color }}>
+        {student.enrollment ? formatMoney(value) : "—"}
+      </td>
+    );
+  }
+
   return (
     <main
       dir="rtl"
       lang="ar"
       style={{
         maxWidth: "100%",
-        margin: "20px auto",
-        padding: "20px"
+        margin: "16px auto",
+        padding: "0 20px"
       }}
     >
-      <h1 style={{ color: "#1e40af" }}>
+      <h1 style={{ color: "#1e40af", margin: "0 0 12px" }}>
         إدارة بيانات الأطفال
+        {options.academicYear && (
+          <span style={{ fontSize: "15px", color: "#64748b", fontWeight: "normal" }}>
+            {" "}— السنة الدراسية {options.academicYear}
+          </span>
+        )}
       </h1>
-
-      <p style={{ color: "#64748b" }}>
-        تسجيل الأطفال وتعديل بياناتهم مباشرة
-      </p>
 
       <form
         onSubmit={addStudent}
         style={{
           display: "flex",
-          gap: "10px",
+          gap: "8px",
           flexWrap: "wrap",
-          padding: "20px",
-          marginBottom: "20px",
+          alignItems: "center",
+          padding: "14px",
+          marginBottom: "14px",
           backgroundColor: "#f8fafc",
           borderRadius: "12px"
         }}
       >
+        <strong style={{ color: "#1e40af" }}>طفل جديد:</strong>
+
         {[
-          ["studentCode", "رمز الطفل", 50],
-          ["firstName", "الاسم", 100],
-          ["lastName", "اللقب", 100]
-        ].map(([field, label, limit]) => (
+          ["firstName", "الاسم", true],
+          ["fatherName", "اسم الأب", false],
+          ["grandfatherName", "اسم الجد", false]
+        ].map(([field, label, required]) => (
           <input
             key={field}
             aria-label={label}
             placeholder={label}
             value={form[field]}
-            maxLength={limit}
-            required
+            maxLength={100}
+            required={required}
             onChange={(event) =>
               setForm((previous) => ({
                 ...previous,
                 [field]: event.target.value
               }))
             }
-            style={{
-              padding: "10px",
-              border: "1px solid #cbd5e1",
-              borderRadius: "6px"
-            }}
+            style={{ ...control, width: "140px" }}
           />
         ))}
+
+        <select
+          aria-label="الشعبة"
+          value={form.classId}
+          onChange={(event) => setForm((previous) => ({ ...previous, classId: event.target.value }))}
+          style={control}
+        >
+          <option value="">— الشعبة —</option>
+          {options.classes.map((cls) => (
+            <option key={cls.id} value={cls.id}>{classLabel(cls)}</option>
+          ))}
+        </select>
 
         <button
           type="submit"
           disabled={saving}
           style={{
-            padding: "10px 20px",
+            padding: "9px 20px",
             backgroundColor: "#2563eb",
             color: "white",
             border: "none",
@@ -378,28 +524,65 @@ export default function StudentsTable() {
         </button>
       </form>
 
-      <input
-        aria-label="البحث عن طفل"
-        placeholder="البحث بالاسم أو الرمز أو الهاتف..."
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        style={{
-          width: "100%",
-          maxWidth: "450px",
-          padding: "12px",
-          boxSizing: "border-box",
-          border: "1px solid #cbd5e1",
-          borderRadius: "8px",
-          marginBottom: "15px"
-        }}
-      />
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "10px" }}>
+        <input
+          aria-label="البحث عن طفل"
+          placeholder="البحث بالاسم أو الرمز أو الهاتف أو السكن..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          style={{ ...control, flex: "1 1 260px", maxWidth: "420px" }}
+        />
 
-      <p style={{ color: "#64748b" }}>
-        آخر تحديث:{" "}
-        {lastSync
-          ? lastSync.toLocaleTimeString("ar-IQ")
-          : "بانتظار البيانات"}
-      </p>
+        <div role="group" aria-label="الفترة" style={{ display: "flex", gap: "4px" }}>
+          {[["", "الكل"], ...Object.entries(SHIFTS)].map(([value, label]) => (
+            <button
+              key={value || "all"}
+              type="button"
+              aria-pressed={shift === value}
+              onClick={() => { setShift(value); setClassId(""); }}
+              style={{
+                ...control,
+                cursor: "pointer",
+                backgroundColor: shift === value ? "#2563eb" : "#ffffff",
+                color: shift === value ? "#ffffff" : "#1e293b",
+                borderColor: shift === value ? "#2563eb" : "#cbd5e1"
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <select
+          aria-label="الشعبة"
+          value={classId}
+          onChange={(event) => setClassId(event.target.value)}
+          style={control}
+        >
+          <option value="">كل الشعب</option>
+          {shownClasses.map((cls) => (
+            <option key={cls.id} value={String(cls.id)}>
+              {classLabel(cls)}{cls.teacherName ? ` — ${cls.teacherName}` : ""}
+            </option>
+          ))}
+        </select>
+
+        {reviewCount > 0 && (
+          <label style={{ display: "flex", alignItems: "center", gap: "6px", color: "#b45309", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={reviewOnly}
+              onChange={(event) => setReviewOnly(event.target.checked)}
+            />
+            بحاجة إلى مراجعة ({reviewCount})
+          </label>
+        )}
+
+        <span style={{ marginInlineStart: "auto", color: "#64748b", fontSize: "13px" }}>
+          آخر تحديث:{" "}
+          {lastSync ? lastSync.toLocaleTimeString("ar-IQ") : "بانتظار البيانات"}
+        </span>
+      </div>
 
       {error && (
         <p role="alert" style={{ color: "#dc2626" }}>
@@ -413,7 +596,7 @@ export default function StudentsTable() {
         <div
           style={{
             width: "100%",
-            maxHeight: "calc(100vh - 150px)",
+            maxHeight: "calc(100vh - 250px)",
             overflow: "auto",
             border: "1px solid #e2e8f0",
             borderRadius: "10px"
@@ -431,11 +614,10 @@ export default function StudentsTable() {
               <tr>
                 <th style={{ ...headerStyle, ...pinned(0, INDEX_WIDTH), zIndex: 3 }}>ت</th>
                 <th style={{ ...headerStyle, ...pinned(INDEX_WIDTH, NAME_WIDTH), zIndex: 3 }}>الطفل</th>
-
                 {columns.map((column) => (
                   <th
                     key={column.field}
-                    style={headerStyle}
+                    style={column.kind === "money" ? { ...headerStyle, textAlign: "left" } : headerStyle}
                   >
                     {column.label}
                   </th>
@@ -445,14 +627,17 @@ export default function StudentsTable() {
 
             <tbody>
               {filteredStudents.map((student, index) => (
-                <tr key={student.id}>
+                <tr
+                  key={student.id}
+                  style={{ opacity: student.status === "ACTIVE" ? 1 : 0.55 }}
+                >
                   <td style={indexCellStyle}>{index + 1}</td>
 
                   <td style={nameCellStyle}>
                     <button
                       type="button"
                       onClick={() => setDialogId(student.id)}
-                      title="تعديل جميع بيانات الطفل"
+                      title={student.reviewNote ? `يحتاج مراجعة: ${student.reviewNote}` : "تعديل جميع بيانات الطفل"}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -477,46 +662,44 @@ export default function StudentsTable() {
                           fontWeight: 600
                         }}
                       >
-                        {student.firstName} {student.lastName}
+                        {fullName(student)}
                       </span>
-                      <span style={{ color: "#2563eb", fontSize: "13px" }}>
-                        تعديل
-                      </span>
+                      {student.reviewNote && (
+                        <span aria-label="يحتاج مراجعة" style={{ color: "#d97706" }}>⚠</span>
+                      )}
                     </button>
                   </td>
 
-                  {columns.map((column) => (
-                    <td
-                      key={column.field}
-                      style={cellStyle}
-                    >
-                      {column.kind === "parent" ? (
-                        <ParentLinkCell
-                          studentId={student.id}
-                          relation={column.relation}
-                          parent={student[column.field]}
-                          onChanged={reloadAfterFamilyChange}
-                          onEditingChange={editingChanged}
-                        />
-                      ) : (
-                      <EditableCell
-                        studentId={student.id}
-                        field={column.field}
-                        type={column.type || "text"}
-                        value={displayValue(
-                          student,
-                          column.field
-                        )}
-                        updatedAt={student.updatedAt}
-                        onSaved={handleStudentSaved}
-                        onEditingChange={editingChanged}
-                      />
-                      )}
-                    </td>
-                  ))}
+                  {columns.map((column) =>
+                    column.kind === "money" ? (
+                      moneyCell(student, column.field)
+                    ) : (
+                      <td key={column.field} style={cellStyle}>
+                        {renderCell(student, column)}
+                      </td>
+                    )
+                  )}
                 </tr>
               ))}
             </tbody>
+
+            {filteredStudents.length > 0 && (
+              <tfoot>
+                <tr style={{ fontWeight: "bold", backgroundColor: "#f8fafc" }}>
+                  <td style={{ ...indexCellStyle, backgroundColor: "#f8fafc" }} />
+                  <td style={{ ...nameCellStyle, backgroundColor: "#f8fafc" }}>
+                    المجموع ({filteredStudents.length})
+                  </td>
+                  {columns.map((column) =>
+                    column.kind === "money" ? (
+                      <td key={column.field} style={moneyStyle}>{formatMoney(totals[column.field])}</td>
+                    ) : (
+                      <td key={column.field} style={cellStyle} />
+                    )
+                  )}
+                </tr>
+              </tfoot>
+            )}
           </table>
 
           {filteredStudents.length === 0 && (
@@ -527,14 +710,11 @@ export default function StudentsTable() {
         </div>
       )}
 
-      <p style={{ color: "#64748b" }}>
-        عدد الأطفال المعروضين: {filteredStudents.length}
-      </p>
-
       {dialogStudent && (
         <StudentDialog
           key={dialogStudent.id}
           student={dialogStudent}
+          options={options}
           onClose={() => setDialogId(null)}
           onSaved={handleStudentSaved}
           onFamilyChanged={reloadAfterFamilyChange}

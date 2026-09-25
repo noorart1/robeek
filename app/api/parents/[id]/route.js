@@ -13,10 +13,8 @@ const editableFields = {
   address: 500
 };
 
-const requiredFields = [
-  "firstName",
-  "lastName"
-];
+// Names may be blank: many mothers are known only by phone number.
+const requiredFields = [];
 
 function errorResponse(message, status, extra = {}) {
   return Response.json(

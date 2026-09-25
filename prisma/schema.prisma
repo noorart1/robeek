@@ -33,6 +33,7 @@ model Class {
   shift          String?
   capacity       Int?
   academicYearId Int
+  teacherName    String?
   AcademicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
   Enrollment     Enrollment[]
 
@@ -47,6 +48,8 @@ model Enrollment {
   enrollmentDate DateTime     @default(now())
   status         String       @default("ACTIVE")
   tuitionFee     Decimal      @default(0.00) @db.Decimal(15, 2)
+  attendanceType String?
+  paymentPlan    String?
   AcademicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
   Class          Class        @relation(fields: [classId], references: [id])
   Student        Student      @relation(fields: [studentId], references: [id])
@@ -67,8 +70,8 @@ model LoginAttempt {
 
 model Parent {
   id            Int             @id @default(autoincrement())
-  firstName     String
-  lastName      String
+  firstName     String?
+  lastName      String?
   phone         String?
   phone2        String?
   address       String?         @db.Text
@@ -104,25 +107,33 @@ model Session {
 }
 
 model Student {
-  id             Int             @id @default(autoincrement())
-  studentCode    String          @unique
-  firstName      String
-  lastName       String
-  fatherName     String?
-  birthDate      DateTime?       @db.Date
-  gender         String?
-  nationalId     String?         @unique
-  phone          String?
-  address        String?         @db.Text
-  status         String          @default("ACTIVE")
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime
-  emergencyPhone String?
-  notes          String?         @db.Text
-  photo          String?         @db.Text
-  Attendance     Attendance[]
-  Enrollment     Enrollment[]
-  StudentParent  StudentParent[]
+  id              Int             @id @default(autoincrement())
+  studentCode     String          @unique
+  firstName       String
+  lastName        String?
+  fatherName      String?
+  grandfatherName String?
+  birthDate       DateTime?       @db.Date
+  birthYear       Int?
+  gender          String?
+  nationalId      String?         @unique
+  phone           String?
+  address         String?         @db.Text
+  status          String          @default("ACTIVE")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime
+  emergencyPhone  String?
+  notes           String?         @db.Text
+  photo           String?         @db.Text
+  transportLineId Int?
+  transportOrder  Int?
+  reviewNote      String?         @db.Text
+  Attendance      Attendance[]
+  Enrollment      Enrollment[]
+  StudentParent   StudentParent[]
+  TransportLine   TransportLine?  @relation(fields: [transportLineId], references: [id])
+
+  @@index([transportLineId])
 }
 
 model StudentParent {
@@ -134,6 +145,14 @@ model StudentParent {
 
   @@id([studentId, parentId])
   @@index([parentId], map: "StudentParent_parentId_fkey")
+}
+
+model TransportLine {
+  id          Int       @id @default(autoincrement())
+  name        String
+  driverPhone String?
+  shift       String    @default("MORNING")
+  Student     Student[]
 }
 
 model User {

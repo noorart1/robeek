@@ -2,8 +2,9 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "نظام إدارة المدرسة",
-  description: "نظام إدارة بيانات الأطفال وأولياء الأمور"
+  title: "روبيك للتعليم المبكر",
+  description: "نظام إدارة بيانات الأطفال وأولياء الأمور",
+  icons: { icon: "/logo.png" }
 };
 
 export default function RootLayout({ children }) {

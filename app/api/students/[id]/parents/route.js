@@ -235,9 +235,10 @@ export async function POST(request, { params }) {
               ? toWesternDigits(body.phone.trim())
               : "";
 
+          // A name or a phone number: mothers are often listed by
+          // phone only.
           if (
-            !firstName ||
-            !lastName ||
+            (!firstName && !phone) ||
             firstName.length > 100 ||
             lastName.length > 100 ||
             phone.length > 30
@@ -254,8 +255,8 @@ export async function POST(request, { params }) {
 
           parent = await tx.parent.create({
             data: {
-              firstName,
-              lastName,
+              firstName: firstName || null,
+              lastName: lastName || null,
               phone: phone || null,
               updatedAt: new Date()
             }
@@ -302,7 +303,7 @@ export async function POST(request, { params }) {
         409
       ],
       INVALID_DATA: [
-        "يرجى إدخال اسم الوالد ولقبه بصورة صحيحة.",
+        "يرجى إدخال الاسم أو رقم الهاتف.",
         400
       ],
       INVALID_PHONE: [

@@ -65,12 +65,13 @@ export default function LoginPage() {
           boxShadow: "0 8px 30px rgba(0,0,0,0.06)"
         }}
       >
-        <h1 style={{
-          textAlign: "center",
-          color: "#1e40af"
-        }}>
-          نظام إدارة المدرسة
-        </h1>
+        <img
+          src="/logo.png"
+          alt="روبيك للتعليم المبكر"
+          width={140}
+          height={140}
+          style={{ display: "block", margin: "0 auto 8px" }}
+        />
 
         <p style={{
           textAlign: "center",

@@ -2,6 +2,7 @@
 import prisma from "../../../../lib/prisma";
 import { getCurrentUser } from "../../../../lib/auth";
 import { toWesternDigits } from "../../../../lib/digits";
+import { loadStudent } from "../../../../lib/student-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,13 +14,17 @@ const editableFields = [
   "firstName",
   "lastName",
   "fatherName",
+  "grandfatherName",
   "nationalId",
   "birthDate",
+  "birthYear",
   "gender",
   "phone",
   "address",
   "emergencyPhone",
   "notes",
+  "reviewNote",
+  "transportLineId",
   "status"
 ];
 
@@ -27,8 +32,7 @@ const editableFields = [
 
 const requiredFields = [
   "studentCode",
-  "firstName",
-  "lastName"
+  "firstName"
 ];
 
 // محدودیت طول فیلدها
@@ -38,22 +42,31 @@ const fieldLimits = {
   firstName: 100,
   lastName: 100,
   fatherName: 100,
+  grandfatherName: 100,
   nationalId: 30,
   birthDate: 10,
+  birthYear: 4,
   gender: 30,
   phone: 30,
   address: 500,
   emergencyPhone: 30,
   notes: 500,
+  reviewNote: 1000,
+  transportLineId: 12,
   status: 30
 };
 
 // فیلدهایی که می‌توانند خالی باشند
 
 const nullableFields = [
+  "lastName",
   "fatherName",
+  "grandfatherName",
   "nationalId",
   "birthDate",
+  "birthYear",
+  "reviewNote",
+  "transportLineId",
   "gender",
   "phone",
   "address",
@@ -64,6 +77,7 @@ const nullableFields = [
 // Fields where Arabic-Indic digits are accepted and stored as ASCII
 const digitFields = [
   "studentCode",
+  "birthYear",
   "nationalId",
   "phone",
   "emergencyPhone"
@@ -202,6 +216,34 @@ function validateField(field, value) {
     ) {
       return { error: "يرجى إدخال رقم هاتف صحيح." };
     }
+  }
+
+  // سنة الميلاد (المواليد) — the only birth information many families give
+
+  if (field === "birthYear" && trimmedValue) {
+    const year = Number(trimmedValue);
+
+    if (
+      !/^\d{4}$/.test(trimmedValue) ||
+      year < 2000 ||
+      year > new Date().getUTCFullYear()
+    ) {
+      return { error: "يرجى إدخال سنة ميلاد صحيحة." };
+    }
+
+    newValue = year;
+  }
+
+  // خط النقل (existence is enforced by the foreign key)
+
+  if (field === "transportLineId" && trimmedValue) {
+    const lineId = Number(trimmedValue);
+
+    if (!Number.isSafeInteger(lineId) || lineId <= 0) {
+      return { error: "خط النقل المحدد غير صالح." };
+    }
+
+    newValue = lineId;
   }
 
   // جنسیت کودک
@@ -356,12 +398,7 @@ export async function PATCH(request, { params }) {
     // بررسی تداخل ویرایش
 
     if (result.count === 0) {
-      const currentStudent =
-        await prisma.student.findUnique({
-          where: {
-            id: studentId
-          }
-        });
+      const currentStudent = await loadStudent(studentId);
 
       if (!currentStudent) {
         return errorResponse(
@@ -382,12 +419,7 @@ export async function PATCH(request, { params }) {
 
     // دریافت اطلاعات ذخیره‌شده
 
-    const student =
-      await prisma.student.findUnique({
-        where: {
-          id: studentId
-        }
-      });
+    const student = await loadStudent(studentId);
 
     return Response.json(
       {
@@ -409,6 +441,15 @@ export async function PATCH(request, { params }) {
       return errorResponse(
         "هذه القيمة مسجلة مسبقاً لطفل آخر.",
         409
+      );
+    }
+
+    // Foreign key: the chosen transport line does not exist
+    if (error.code === "P2003") {
+      return errorResponse(
+        "خط النقل المحدد غير موجود.",
+        400,
+        { field: "transportLineId" }
       );
     }
 
