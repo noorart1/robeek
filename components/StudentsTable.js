@@ -72,18 +72,39 @@ function compareStudents(a, b) {
 const INDEX_WIDTH = 44;
 const NAME_WIDTH = 250;
 
-const emptyForm = {
+// What the edit dialog starts from when adding a child.
+const blankStudent = {
+  id: null,
+  studentCode: "",
   firstName: "",
   fatherName: "",
   grandfatherName: "",
-  classId: ""
+  lastName: "",
+  birthYear: null,
+  birthDate: null,
+  gender: "",
+  nationalId: "",
+  phone: "",
+  emergencyPhone: "",
+  address: "",
+  notes: "",
+  reviewNote: null,
+  status: "ACTIVE",
+  photo: null,
+  transportLine: null,
+  father: null,
+  mother: null,
+  enrollment: null,
+  financial: { tuitionFee: 0, totalPaid: 0, remaining: 0, curriculumPaid: 0 },
+  updatedAt: null
 };
+
+const NEW = "new";
 
 export default function StudentsTable({ initialClassId = "", initialReview = false }) {
   const [students, setStudents] = useState([]);
   const [options, setOptions] = useState({ classes: [], lines: [] });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [shift, setShift] = useState("");
@@ -91,7 +112,7 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
   const [reviewOnly, setReviewOnly] = useState(initialReview);
   const [lastSync, setLastSync] = useState(null);
   const [dialogId, setDialogId] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  const [notice, setNotice] = useState("");
 
   const refreshInProgress = useRef(false);
   const mutationInProgress = useRef(false);
@@ -217,59 +238,20 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
     };
   }, []);
 
-  async function addStudent(event) {
-    event.preventDefault();
-
-    if (saving || mutationInProgress.current) return;
-
-    mutationInProgress.current = true;
+  // A child created in the dialog joins the table, and the dialog becomes
+  // that child's edit window.
+  function handleStudentCreated(student, linked = {}) {
     requestVersion.current += 1;
+    setStudents((previous) => [...previous.filter((s) => s.id !== student.id), student]);
+    setDialogId(student.id);
+    setLastSync(new Date());
 
-    setSaving(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/students", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(form)
-      });
-
-      if (redirectIfSignedOut(response)) {
-        throw new Error(SESSION_EXPIRED);
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error || "تعذر تسجيل الطفل."
-        );
-      }
-
-      setStudents((previous) => [
-        ...previous.filter(
-          (student) => student.id !== data.student.id
-        ),
-        data.student
-      ]);
-
-      // Keep the chosen section: children are usually entered one class
-      // at a time.
-      setForm((previous) => ({ ...emptyForm, classId: previous.classId }));
-
-      // Straight into the full form to fill in the rest of the details.
-      setDialogId(data.student.id);
-
-      setLastSync(new Date());
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      mutationInProgress.current = false;
-      setSaving(false);
-    }
+    const reused = [linked.father && "الأب", linked.mother && "الأم"].filter(Boolean);
+    setNotice(
+      reused.length
+        ? `تم تسجيل «${fullName(student)}» (${student.studentCode}) وربطه بـ${reused.join(" و")} المسجل مسبقاً لأخ/أخت.`
+        : `تم تسجيل «${fullName(student)}» (${student.studentCode}).`
+    );
   }
 
   function handleStudentSaved(updatedStudent) {
@@ -326,7 +308,9 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
   const reviewCount = students.filter((s) => s.reviewNote).length;
 
   const dialogStudent =
-    dialogId && students.find((student) => student.id === dialogId);
+    dialogId === NEW
+      ? blankStudent
+      : dialogId && students.find((student) => student.id === dialogId);
 
   const cellStyle = {
     borderBottom: "1px solid #e2e8f0",
@@ -460,71 +444,22 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
         )}
       </h1>
 
-      <form
-        onSubmit={addStudent}
-        style={{
-          display: "flex",
-          gap: "8px",
-          flexWrap: "wrap",
-          alignItems: "center",
-          padding: "14px",
-          marginBottom: "14px",
-          backgroundColor: "#f8fafc",
-          borderRadius: "12px"
-        }}
-      >
-        <strong style={{ color: "#1e40af" }}>طفل جديد:</strong>
-
-        {[
-          ["firstName", "الاسم", true],
-          ["fatherName", "اسم الأب", false],
-          ["grandfatherName", "اسم الجد", false]
-        ].map(([field, label, required]) => (
-          <input
-            key={field}
-            aria-label={label}
-            placeholder={label}
-            value={form[field]}
-            maxLength={100}
-            required={required}
-            onChange={(event) =>
-              setForm((previous) => ({
-                ...previous,
-                [field]: event.target.value
-              }))
-            }
-            style={{ ...control, width: "140px" }}
-          />
-        ))}
-
-        <select
-          aria-label="الشعبة"
-          value={form.classId}
-          onChange={(event) => setForm((previous) => ({ ...previous, classId: event.target.value }))}
-          style={control}
-        >
-          <option value="">— الشعبة —</option>
-          {options.classes.map((cls) => (
-            <option key={cls.id} value={cls.id}>{classLabel(cls)}</option>
-          ))}
-        </select>
-
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "10px" }}>
         <button
-          type="submit"
-          disabled={saving}
+          type="button"
+          onClick={() => { setNotice(""); setDialogId(NEW); }}
           style={{
-            padding: "9px 20px",
+            padding: "9px 18px",
             backgroundColor: "#2563eb",
-            color: "white",
+            color: "#ffffff",
             border: "none",
-            borderRadius: "6px"
+            borderRadius: "6px",
+            cursor: "pointer"
           }}
         >
-          {saving ? "جارٍ التسجيل..." : "إضافة طفل"}
+          + إضافة طفل
         </button>
-      </form>
 
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "10px" }}>
         <input
           aria-label="البحث عن طفل"
           placeholder="البحث بالاسم أو الرمز أو الهاتف أو السكن..."
@@ -587,6 +522,13 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
       {error && (
         <p role="alert" style={{ color: "#dc2626" }}>
           {error}
+        </p>
+      )}
+
+      {notice && (
+        <p role="status" style={{ color: "#15803d", display: "flex", gap: "8px", alignItems: "center" }}>
+          ✓ {notice}
+          <button type="button" aria-label="إخفاء" onClick={() => setNotice("")}>✕</button>
         </p>
       )}
 
@@ -712,8 +654,11 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
 
       {dialogStudent && (
         <StudentDialog
-          key={dialogStudent.id}
+          key={dialogStudent.id ?? NEW}
           student={dialogStudent}
+          isNew={dialogId === NEW}
+          initialClassId={classId}
+          onCreated={handleStudentCreated}
           options={options}
           onClose={() => setDialogId(null)}
           onSaved={handleStudentSaved}

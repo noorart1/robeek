@@ -16,13 +16,19 @@ import {
 } from "../lib/labels";
 
 // Student fields, saved with PATCH /api/students/[id] { fields }.
-function studentFields(lines) {
+function studentFields(lines, isNew) {
   return [
     { name: "firstName", label: "الاسم", max: 100, required: true },
     { name: "fatherName", label: "اسم الأب", max: 100 },
     { name: "grandfatherName", label: "اسم الجد", max: 100 },
     { name: "lastName", label: "اللقب", max: 100 },
-    { name: "studentCode", label: "رمز الطفل", max: 50, required: true, ltr: true },
+    {
+      name: "studentCode",
+      label: isNew ? "رمز الطفل (تلقائي إن تُرك فارغاً)" : "رمز الطفل",
+      max: 50,
+      required: !isNew,
+      ltr: true
+    },
     { name: "birthYear", label: "المواليد (السنة)", max: 4, ltr: true },
     { name: "birthDate", label: "تاريخ الميلاد الكامل", type: "date" },
     {
@@ -108,20 +114,27 @@ async function send(url, method, body) {
 
 export default function StudentDialog({
   student,
+  isNew = false,
+  initialClassId = "",
   options,
   onClose,
   onSaved,
+  onCreated,
   onDeleted,
   onFamilyChanged,
   onEditingChange
 }) {
   const dialogRef = useRef(null);
-  const fields = studentFields(options.lines);
+  const fields = studentFields(options.lines, isNew);
 
   const [original, setOriginal] = useState(() => valuesOf(student));
   const [form, setForm] = useState(original);
   const [enrollOriginal, setEnrollOriginal] = useState(() => enrollmentOf(student));
-  const [enroll, setEnroll] = useState(enrollOriginal);
+  const [enroll, setEnroll] = useState(() =>
+    isNew ? { ...enrollOriginal, classId: initialClassId } : enrollOriginal
+  );
+  // Only when creating: parents are linked by phone in the same request.
+  const [newParents, setNewParents] = useState({ fatherPhone: "", motherName: "", motherPhone: "" });
   const [version, setVersion] = useState(student.updatedAt);
   const [serverValues, setServerValues] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -131,7 +144,11 @@ export default function StudentDialog({
 
   const changed = changedKeys(form, original);
   const enrollChanged = changedKeys(enroll, enrollOriginal);
-  const dirty = changed.length > 0 || enrollChanged.length > 0;
+  const dirty = isNew
+    ? [...Object.values(form), ...Object.values(newParents), enroll.tuitionFee].some(
+        (value) => value && value !== "ACTIVE"
+      )
+    : changed.length > 0 || enrollChanged.length > 0;
 
   // Open as a modal, and keep the table from polling underneath it.
   useEffect(() => {
@@ -161,6 +178,11 @@ export default function StudentDialog({
     event.preventDefault();
 
     if (saving) return;
+
+    if (isNew) {
+      await create();
+      return;
+    }
 
     if (!dirty) {
       onClose();
@@ -234,6 +256,37 @@ export default function StudentDialog({
 
       onSaved(latest);
       onClose();
+    } catch (err) {
+      setError(err.message || "حدث خطأ في الاتصال بالخادم.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // One request creates the child, the registration and the parents, so a
+  // rejected value leaves nothing half-saved. On success the table swaps
+  // this window for the new child's own edit window (photo, payments,
+  // linking an existing parent).
+  async function create() {
+    setSaving(true);
+    setError("");
+    setFieldError(null);
+
+    try {
+      const { response, data } = await send("/api/students", "POST", {
+        fields: Object.fromEntries(
+          Object.entries(form).filter(([name, value]) => value !== "" && name !== "reviewNote")
+        ),
+        enrollment: enroll.classId ? enroll : null,
+        parents: newParents
+      });
+
+      if (!response.ok) {
+        if (data.field) return showFieldError(data.field, data.error);
+        throw new Error(data.error || "تعذر تسجيل الطفل.");
+      }
+
+      onCreated(data.student, data.linkedExistingParents);
     } catch (err) {
       setError(err.message || "حدث خطأ في الاتصال بالخادم.");
     } finally {
@@ -464,16 +517,26 @@ export default function StudentDialog({
     >
       <div style={{ padding: "20px 22px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-          <StudentPhoto student={student} size={84} />
+          {!isNew && <StudentPhoto student={student} size={84} />}
 
           <div style={{ flex: 1, minWidth: "200px" }}>
-            <h2 style={{ margin: "0 0 2px", color: "#1e40af" }}>{fullName(student)}</h2>
+            <h2 style={{ margin: "0 0 2px", color: "#1e40af" }}>
+              {isNew ? "طفل جديد" : fullName(student)}
+            </h2>
+            {isNew && (
+              <div style={{ color: "#64748b" }}>
+                بعد الحفظ تستطيع إضافة الصورة والدفعات أو ربط أخ/أخت مسجل.
+              </div>
+            )}
+            {!isNew && (
             <div style={{ color: "#64748b", marginBottom: "8px" }}>
               {student.studentCode}
               {cls && ` — ${classLabel(cls)}`}
               {cls?.teacherName && ` — المرشدة: ${cls.teacherName}`}
             </div>
+            )}
 
+            {!isNew && (
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <label
                 style={{
@@ -503,6 +566,7 @@ export default function StudentDialog({
                 </button>
               )}
             </div>
+            )}
           </div>
         </div>
 
@@ -558,6 +622,40 @@ export default function StudentDialog({
             ))}
           </div>
 
+          {isNew && (
+            <>
+              <h3 style={sectionTitle}>الوالدان</h3>
+              <div style={grid}>
+                {[
+                  ["fatherPhone", "رقم هاتف الأب", true],
+                  ["motherName", "اسم الأم", false],
+                  ["motherPhone", "رقم هاتف الأم", true]
+                ].map(([name, label, phone]) => (
+                  <label key={name} style={labelStyle(false)}>
+                    <span>{label}</span>
+                    <input
+                      id={`student-${name}`}
+                      value={newParents[name]}
+                      disabled={saving}
+                      maxLength={phone ? 30 : 100}
+                      dir={phone ? "ltr" : "rtl"}
+                      inputMode={phone ? "tel" : undefined}
+                      placeholder={phone ? "07XXXXXXXXX" : undefined}
+                      onChange={(event) =>
+                        setNewParents((previous) => ({ ...previous, [name]: event.target.value }))
+                      }
+                      style={inputStyle(name)}
+                    />
+                    {fieldNotes({ name })}
+                  </label>
+                ))}
+              </div>
+              <small style={{ color: "#64748b" }}>
+                اسم الأب يؤخذ من اسم الطفل. إذا كان رقم الهاتف مسجلاً لأخ أو أخت، يُربط الطفل بنفس الوالد.
+              </small>
+            </>
+          )}
+
           <h3 style={sectionTitle}>التسجيل والرسوم</h3>
           <div style={grid}>
             {enrollmentFields.map((field) => (
@@ -573,6 +671,8 @@ export default function StudentDialog({
         </form>
 
         {/* Outside the form above: these render forms of their own. */}
+        {!isNew && (
+        <>
         <Payments student={student} onSaved={onSaved} disabled={saving} />
 
         <h3 style={sectionTitle}>الوالدان</h3>
@@ -602,6 +702,8 @@ export default function StudentDialog({
             </div>
           ))}
         </div>
+        </>
+        )}
 
         {error && (
           <p role="alert" style={{ color: "#dc2626" }}>{error}</p>
@@ -632,7 +734,7 @@ export default function StudentDialog({
               cursor: saving ? "wait" : "pointer"
             }}
           >
-            {saving ? "جارٍ الحفظ..." : "حفظ"}
+            {saving ? "جارٍ الحفظ..." : isNew ? "حفظ ومتابعة" : "حفظ"}
           </button>
 
           <button
@@ -644,6 +746,7 @@ export default function StudentDialog({
             إغلاق
           </button>
 
+          {!isNew && (
           <button
             type="button"
             onClick={deleteStudent}
@@ -660,6 +763,7 @@ export default function StudentDialog({
           >
             حذف الطفل
           </button>
+          )}
         </div>
       </div>
     </dialog>
