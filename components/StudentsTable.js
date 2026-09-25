@@ -314,8 +314,7 @@ export default function StudentsTable() {
       style={{
         maxWidth: "100%",
         margin: "20px auto",
-        padding: "20px",
-        fontFamily: "Tahoma, sans-serif"
+        padding: "20px"
       }}
     >
       <h1 style={{ color: "#1e40af" }}>
