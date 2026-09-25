@@ -181,6 +181,11 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
   TUITION payments only, CURRICULUM payments are reported separately.
   Section, fee and attendance type are edited in the dialog, which saves them
   through `PUT /api/students/[id]/enrollment`.
+- **Attendance** (`/dashboard/attendance`, `components/AttendanceBoard.js`)
+  stores one `Attendance` row per child per day: PRESENT / ABSENT / LATE /
+  EXCUSED, or no row for "not recorded". Days are `YYYY-MM-DD` strings from
+  `lib/dates.js`; "today" is always `iraqToday()` (Asia/Baghdad), never the
+  server clock, and the school week is Sunday–Thursday.
 - Search goes through `matchesSearch` in `lib/arabic.js`, which folds
   أ/إ/آ→ا, ة→ه, ى/ی→ي, tashkeel, and Arabic-Indic digits. Use it for any new
   search box.

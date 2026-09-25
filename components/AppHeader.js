@@ -5,6 +5,7 @@ import LogoutButton from "./LogoutButton";
 const links = [
   { href: "/dashboard", label: "الرئيسية" },
   { href: "/dashboard/students", label: "الأطفال" },
+  { href: "/dashboard/attendance", label: "الحضور" },
   { href: "/dashboard/finance", label: "المالية" },
   { href: "/dashboard/lines", label: "الخطوط" }
 ];

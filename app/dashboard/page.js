@@ -3,7 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import prisma from "../../lib/prisma";
 import { getCurrentUser } from "../../lib/auth";
-import { SHIFTS } from "../../lib/labels";
+import { ATTENDANCE_STATUSES, SHIFTS } from "../../lib/labels";
+import { iraqToday, isWeekend, parseDay } from "../../lib/dates";
 import { activeAcademicYear } from "../../lib/student-data";
 import AppHeader from "../../components/AppHeader";
 
@@ -23,8 +24,9 @@ export default async function DashboardPage() {
   }
 
   const year = await activeAcademicYear();
+  const today = iraqToday();
 
-  const [classes, activeStudents, needsReview, totalParents] =
+  const [classes, activeStudents, needsReview, totalParents, todayRecords] =
     await Promise.all([
       prisma.class.findMany({
         where: year ? { academicYearId: year.id } : undefined,
@@ -43,8 +45,25 @@ export default async function DashboardPage() {
       }),
       prisma.student.count({ where: { status: "ACTIVE" } }),
       prisma.student.count({ where: { reviewNote: { not: null } } }),
-      prisma.parent.count()
+      prisma.parent.count(),
+      prisma.attendance.findMany({
+        where: { date: parseDay(today), Student: { status: "ACTIVE" } },
+        select: {
+          status: true,
+          Student: { select: { Enrollment: { select: { classId: true } } } }
+        }
+      })
     ]);
+
+  // Today's attendance per section: { classId: { PRESENT: n, ... } }.
+  const attendanceByClass = {};
+  for (const record of todayRecords) {
+    for (const { classId } of record.Student.Enrollment) {
+      const counts = (attendanceByClass[classId] ??= {});
+      counts[record.status] = (counts[record.status] || 0) + 1;
+    }
+  }
+  const schoolDay = !isWeekend(today);
 
   const stats = [
     ["الأطفال النشطون", activeStudents],
@@ -130,6 +149,14 @@ export default async function DashboardPage() {
                           </Link>
                         </td>
                         <td style={{ color: "#64748b" }}>{cls.teacherName || ""}</td>
+                        {schoolDay && (
+                          <td style={{ fontSize: "13px" }}>
+                            <TodayAttendance
+                              counts={attendanceByClass[cls.id]}
+                              total={cls._count.Enrollment}
+                            />
+                          </td>
+                        )}
                         <td style={{ textAlign: "left", fontWeight: "bold" }}>
                           {cls._count.Enrollment}
                         </td>
@@ -138,6 +165,7 @@ export default async function DashboardPage() {
                     <tr>
                       <td style={{ padding: "8px 0", fontWeight: "bold" }}>المجموع</td>
                       <td />
+                      {schoolDay && <td />}
                       <td style={{ textAlign: "left", fontWeight: "bold", color: "#1e40af" }}>
                         {total}
                       </td>
@@ -151,4 +179,26 @@ export default async function DashboardPage() {
       </main>
     </>
   );
+}
+
+// "حاضر 18 · غائب 2", or a prompt when the section has no records today.
+function TodayAttendance({ counts, total }) {
+  if (!total) return null;
+
+  if (!counts) {
+    return (
+      <Link href="/dashboard/attendance" style={{ color: "#94a3b8" }}>
+        لم يُسجَّل الحضور
+      </Link>
+    );
+  }
+
+  return Object.entries(ATTENDANCE_STATUSES)
+    .filter(([status]) => counts[status])
+    .map(([status, s], index) => (
+      <span key={status} style={{ color: s.color }}>
+        {index > 0 && " · "}
+        {s.label} {counts[status]}
+      </span>
+    ));
 }
