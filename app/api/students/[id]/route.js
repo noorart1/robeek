@@ -323,7 +323,8 @@ export async function PATCH(request, { params }) {
         updatedAt: expectedUpdatedAt
       },
       data: {
-        [field]: newValue
+        [field]: newValue,
+        updatedAt: new Date()
       }
     });
 
