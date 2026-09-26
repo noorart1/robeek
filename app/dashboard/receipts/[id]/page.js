@@ -65,7 +65,10 @@ export default async function ReceiptPage({ params }) {
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "20px", fontWeight: 700, color: "#1e40af" }}>مركز روبيك للتعليم المبكر</div>
             <div style={{ color: "#64748b" }}>
-              {student.enrollment?.academicYear?.name ? `السنة الدراسية ${student.enrollment.academicYear.name}` : ""}
+              {student.enrollment?.academicYear?.name && (
+                // dir="ltr": after Arabic text "2025-2026" would render as 2026-2025.
+                <>السنة الدراسية <span dir="ltr">{student.enrollment.academicYear.name}</span></>
+              )}
             </div>
           </div>
           <div style={{ textAlign: "center" }}>

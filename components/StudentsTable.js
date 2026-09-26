@@ -440,7 +440,7 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
         إدارة بيانات الأطفال
         {options.academicYear && (
           <span style={{ fontSize: "15px", color: "#64748b", fontWeight: "normal" }}>
-            {" "}— السنة الدراسية {options.academicYear}
+            {" "}— السنة الدراسية <span dir="ltr">{options.academicYear}</span>
           </span>
         )}
       </h1>

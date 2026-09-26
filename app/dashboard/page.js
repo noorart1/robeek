@@ -83,7 +83,7 @@ export default async function DashboardPage() {
         </h1>
         {year && (
           <p style={{ color: "#64748b", marginTop: 0 }}>
-            السنة الدراسية {year.name}
+            السنة الدراسية <span dir="ltr">{year.name}</span>
           </p>
         )}
 

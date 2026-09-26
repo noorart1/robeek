@@ -131,7 +131,7 @@ export default async function FinancePage() {
           الملف المالي والأرصدة
         </h1>
         <p style={{ color: "#64748b", marginTop: 0 }}>
-          {year ? `السنة الدراسية ${year.name}` : "لا توجد سنة دراسية نشطة"} — المبالغ بالدينار العراقي
+          {year ? <>السنة الدراسية <span dir="ltr">{year.name}</span></> : "لا توجد سنة دراسية نشطة"} — المبالغ بالدينار العراقي
         </p>
 
         <Link
