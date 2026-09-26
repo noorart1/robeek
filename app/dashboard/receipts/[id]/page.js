@@ -60,8 +60,8 @@ export default async function ReceiptPage({ params }) {
           overflow: "hidden"
         }}
       >
-        <header style={{ display: "flex", alignItems: "center", gap: "16px", borderBottom: "2px solid #1e40af", paddingBottom: "12px" }}>
-          <img src="/logo.png" alt="" width={84} height={84} />
+        <header className="receipt-header" style={{ display: "flex", alignItems: "center", gap: "16px", borderBottom: "2px solid #1e40af", paddingBottom: "12px" }}>
+          <img className="receipt-logo" src="/logo.png" alt="" width={84} height={84} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "20px", fontWeight: 700, color: "#1e40af" }}>مركز روبيك للتعليم المبكر</div>
             <div style={{ color: "#64748b" }}>
@@ -76,38 +76,38 @@ export default async function ReceiptPage({ params }) {
           </div>
         </header>
 
-        <section style={{ marginTop: "14px", fontSize: "16px" }}>
-          <div style={row}>
+        <section className="receipt-body" style={{ marginTop: "14px", fontSize: "16px" }}>
+          <div className="receipt-row" style={row}>
             <span style={key}>التاريخ:</span>
             <strong>{formatDate(payment.paymentDate.toISOString())}</strong>
           </div>
-          <div style={row}>
+          <div className="receipt-row" style={row}>
             <span style={key}>استلمنا من:</span>
             <strong>{payer}</strong>
           </div>
-          <div style={row}>
+          <div className="receipt-row" style={row}>
             <span style={key}>مبلغاً وقدره:</span>
             <strong dir="ltr">{formatMoney(amount)} د.ع</strong>
           </div>
-          <div style={row}>
+          <div className="receipt-row" style={row}>
             <span style={key}>المبلغ كتابةً:</span>
             <strong>{amountInWords(amount)}</strong>
           </div>
-          <div style={row}>
+          <div className="receipt-row" style={row}>
             <span style={key}>وذلك عن:</span>
             <span>
               {PAYMENT_TYPES[payment.paymentType] || "قسط"}
               {payment.description ? ` — ${payment.description}` : ""}
             </span>
           </div>
-          <div style={row}>
+          <div className="receipt-row" style={row}>
             <span style={key}>للطفل/ة:</span>
             <span>
               <strong>{fullName(student)}</strong> ({student.studentCode}){cls ? ` — ${classLabel(cls)}` : ""}
             </span>
           </div>
           {payment.paymentType !== "CURRICULUM" && (
-            <div style={row}>
+            <div className="receipt-row" style={row}>
               <span style={key}>المتبقي من الرسوم:</span>
               <span dir="ltr">
                 {formatMoney(student.financial.remaining)} د.ع
@@ -116,13 +116,13 @@ export default async function ReceiptPage({ params }) {
             </div>
           )}
           {!payment.receiptNo && (
-            <p style={{ color: "#64748b", fontSize: "13px" }}>
+            <p className="receipt-note" style={{ color: "#64748b", fontSize: "13px" }}>
               دفعة منقولة من سجل الروضة السابق، بدون رقم وصل.
             </p>
           )}
         </section>
 
-        <footer style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", color: "#475569" }}>
+        <footer className="receipt-footer" style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", color: "#475569" }}>
           <span>توقيع المستلم: ....................</span>
           <span>الختم</span>
         </footer>

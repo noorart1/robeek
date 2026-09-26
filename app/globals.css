@@ -52,6 +52,41 @@ textarea {
   .receipt {
     margin: 0 auto !important;
     box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  /* A5 landscape leaves about 190 × 128 mm inside the margins; the
+     on-screen layout is taller than that and pushed the signature line
+     onto a second sheet. !important: the page uses inline styles. */
+  .receipt {
+    padding: 12px 20px !important;
+  }
+
+  .receipt-header {
+    padding-bottom: 6px !important;
+  }
+
+  .receipt-logo {
+    width: 56px !important;
+    height: 56px !important;
+  }
+
+  .receipt-body {
+    margin-top: 6px !important;
+    font-size: 14px !important;
+  }
+
+  .receipt-row {
+    padding: 3px 0 !important;
+  }
+
+  .receipt-note {
+    margin: 4px 0 0 !important;
+    font-size: 12px !important;
+  }
+
+  .receipt-footer {
+    margin-top: 18px !important;
   }
 
   @page {
