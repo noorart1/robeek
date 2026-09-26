@@ -45,12 +45,19 @@ deployed only when the owner says so. The local copy runs offline against
 a portable MariaDB 10.11 (the production version) in `../mariadb`, with
 the newest production data:
 
+From the VS Code terminal (PowerShell):
+
 ```
-bash scripts/local.sh db                          # terminal 1: MariaDB
-bash scripts/local.sh sync <user>@<host>          # refresh data (online)
-npm run dev                                       # terminal 2: localhost:3000
-npm test
+scripts\db.cmd                                    # terminal 1: MariaDB
+npm.cmd run dev                                   # terminal 2: localhost:3000
+npm.cmd test
+& "C:\Program Files\Git\bin\bash.exe" scripts/local.sh sync <user>@<host>   # refresh data (online)
 ```
+
+PowerShell has no `bash` on its PATH, and blocks `npm` (the `npm.ps1`
+shim) under the default execution policy; `npm.cmd` avoids that, as does
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once. In Git Bash:
+`bash scripts/local.sh db`, `npm run dev`.
 
 `.env` on a dev machine points at `school_dev` on `127.0.0.1`; `sync`
 refuses to run otherwise. Synced backups sit in `../local-backups`, outside
