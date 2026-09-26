@@ -1,4 +1,3 @@
-node_modules/
 .next/
 .env
 .env.*
@@ -24,7 +23,7 @@ id_rsa
 id_ed25519
 
 # Dependencies and build
-node_modules/
+node_modules
 .next/
 nodevenv/
 

@@ -24,35 +24,18 @@ Two different languages are in play — do not mix them up:
 
 Code, comments, and commit messages are English.
 
-## Critical: `node_modules` is a tracked symlink
+## `node_modules` on the server is an untracked symlink
 
-`node_modules` is committed to git as a **symlink** (mode `120000`) pointing at
-the production host's Node environment directory. The real dependencies live
-there, installed by the host's Node version manager.
+On the server, `node_modules` is a **symlink** to the host's Node environment
+(`<nodevenv>/lib/node_modules`), where the host's Node version manager installs
+the real dependencies. It used to be tracked in git (mode `120000`); since
+2026-09-26 it is untracked and ignored (`node_modules` in `.gitignore`, no
+trailing slash — `node_modules/` does not match a symlink).
 
-On Windows that symlink cannot be materialised, so `git status` permanently
-reports `deleted: node_modules`. **This is not a real change.**
+If the symlink ever disappears on the server, the app has no dependencies.
+Recreate it with `ln -s <nodevenv>/lib/node_modules node_modules`.
 
-> Never run `git add -A` or `git commit -a` in this repo. Stage files by name.
-
-Committing that deletion and pulling it on the server would remove the symlink
-and leave production with no dependencies.
-
-A proper fix, if ever wanted: `git rm --cached node_modules`, add it to
-`.gitignore`, and leave the symlink untracked on the server.
-
-### Setting up a fresh clone on Windows
-
-Git on Windows defaults to `core.symlinks=false`, so cloning writes
-`node_modules` as a small **text file** containing the symlink target rather
-than a directory. `npm install` then fails or behaves strangely. Delete it
-first:
-
-```
-rm -f node_modules && npm install
-```
-
-`.env` is gitignored, so a fresh clone has no database configuration — copy it
+Locally, run `npm install` as usual. `.env` is gitignored, so a fresh clone has no database configuration — copy it
 across separately.
 
 ## Deployment
