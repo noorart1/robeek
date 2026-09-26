@@ -38,6 +38,28 @@ Recreate it with `ln -s <nodevenv>/lib/node_modules node_modules`.
 Locally, run `npm install` as usual. `.env` is gitignored, so a fresh clone has no database configuration — copy it
 across separately.
 
+## Local testing first
+
+**Every change is tested on a local copy before it is deployed**, and
+deployed only when the owner says so. The local copy runs offline against
+a portable MariaDB 10.11 (the production version) in `../mariadb`, with
+the newest production data:
+
+```
+bash scripts/local.sh db                          # terminal 1: MariaDB
+bash scripts/local.sh sync <user>@<host>          # refresh data (online)
+npm run dev                                       # terminal 2: localhost:3000
+npm test
+```
+
+`.env` on a dev machine points at `school_dev` on `127.0.0.1`; `sync`
+refuses to run otherwise. Synced backups sit in `../local-backups`, outside
+the repo — they hold children's personal data. Accounts and passwords are
+production's, since the data is. A fresh machine needs the MariaDB zip
+unpacked to `../mariadb`, `mariadb-install-db.exe --datadir=…/data`, a
+`data/my.ini` with `bind-address=127.0.0.1`, and the `.env` database and
+user created in it.
+
 ## Deployment
 
 Production is **cPanel / CloudLinux shared hosting** behind **LiteSpeed**, not
@@ -181,10 +203,6 @@ neither file: use a password manager, and keep `.env` gitignored.
 - **`stderr.log` is append-only and never rotated.** Errors in it are often
   stale. Always compare its mtime against `.next/BUILD_ID` before concluding
   something is broken in the current build.
-- **Building on Windows emits a Prisma engine error** for `/dashboard`
-  (`binaryTargets` is `debian-openssl-3.0.x`). Harmless locally — that route is
-  dynamic and the server build is unaffected. Do not "fix" it by editing
-  `binaryTargets` unless local DB access is genuinely needed.
 - `.env` is gitignored and has never been committed. Keep it that way.
 - Several `*.backup.js` files and `*.before-*-fix.js` files sit beside their
   originals as manual snapshots. They are untracked scratch, not live code.
