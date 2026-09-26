@@ -39,6 +39,10 @@ const securityHeaders = [
 const nextConfig = {
   poweredByHeader: false,
 
+  // Nothing uses next/image. Turning the optimizer off takes the
+  // /_next/image endpoint, and sharp/libvips behind it, off the network.
+  images: { unoptimized: true },
+
   experimental: {
     cpus: 1,
     workerThreads: false
