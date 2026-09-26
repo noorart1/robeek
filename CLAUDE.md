@@ -65,7 +65,20 @@ The same cPanel account also serves a WordPress site and a Laravel app (their
 cron jobs share the crontab). Only touch this app's own directory, and never
 wipe `~/lscache` — it is shared with WordPress.
 
-Deploy sequence:
+`scripts/deploy.sh user@host https://public-url` runs the sequence below,
+checks the result, and restores the previous build if `next build` fails.
+It refuses (before touching the server) when the range adds a migration or
+changes `package.json`/`package-lock.json`; deploy those by hand. Run
+`npm test` first.
+
+Dependencies are installed on the host, not by deploys. `package-lock.json`
+records exactly what is installed there: it was generated on 2026-09-26
+from the host's installed tree with the host's plain npm
+(`/opt/alt/alt-nodejs24/root/usr/bin/npm i --package-lock-only`; the
+activated nodevenv's npm silently wrote nothing). Keep it in step with the
+host, and run `npm audit` against it.
+
+Deploy sequence by hand:
 
 ```
 # local
