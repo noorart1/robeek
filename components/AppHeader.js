@@ -9,7 +9,8 @@ const links = [
   { href: "/dashboard/attendance", label: "الحضور", roles: ["ADMIN", "TEACHER"] },
   { href: "/dashboard/finance", label: "المالية", roles: ["ADMIN"] },
   { href: "/dashboard/lines", label: "الخطوط", roles: ["ADMIN"] },
-  { href: "/dashboard/users", label: "المستخدمون", roles: ["ADMIN"] }
+  { href: "/dashboard/users", label: "المستخدمون", roles: ["ADMIN"] },
+  { href: "/dashboard/backups", label: "النسخ الاحتياطي", roles: ["ADMIN"] }
 ];
 
 export default function AppHeader({ user, active }) {

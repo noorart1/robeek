@@ -29,7 +29,7 @@ nodevenv/
 
 # Logs and backups
 *.log
-backups/
+/backups/
 *.backup.*
 *.backup
 family_update/

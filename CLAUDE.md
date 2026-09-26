@@ -92,17 +92,28 @@ previous commit, and restore the DB dump if a migration ran.
 
 ### Backups
 
-`scripts/backup.js` writes `db-<date>.sql.gz` (mysqldump) and
-`photos-<date>.tar.gz` (`uploads/students/`) to `~/backups/school-app/`,
-outside the app and `public_html` (the files hold children's personal data),
-and deletes backups older than 30 days. It is meant to run nightly from a
-cPanel cron job; the exact line is in the script's header. The DB password
-reaches mysqldump through a temporary 0600 option file, never argv.
+`scripts/backup.js` (logic in `lib/backup.js`) writes `db-<date>.sql.gz`
+(mysqldump) and `photos-<date>.tar.gz` (`uploads/students/`) to
+`~/backups/school-app/`, outside the app and `public_html` (the files hold
+children's personal data), and deletes backups older than 30 days. It is
+meant to run nightly from a cPanel cron job; the exact line is in the
+script's header. The DB password reaches mysqldump through a temporary 0600
+option file, never argv.
 
 Check it occasionally: `tail ~/backups/school-app/backup.log` must show a
 `database →` line for every night, and never `BACKUP FAILED`.
 
-Restore (take a fresh backup of the current state first):
+Admins can do the same from «النسخ الاحتياطي» (`/dashboard/backups`): make
+a backup now, download any backup, upload one (e.g. after losing the
+server) and restore it. Every restore first saves the current state as a
+`-pre-restore` backup. Uploads are named by content, never by the
+uploader's file name; photo archives may only hold `students/<photo>.jpg`
+entries; SQL is piped into `mysql --sandbox`, which refuses `\!` and other
+client commands. Restoring the database also restores its `Session` and
+`Sequence` tables: users may be signed out, and receipt numbers issued
+after the backup will be issued again.
+
+Restore by hand (take a fresh backup of the current state first):
 
 ```
 gunzip -c ~/backups/school-app/db-<date>.sql.gz | mysql <db>
