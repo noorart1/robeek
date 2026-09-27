@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 import { SHIFTS } from "../lib/labels";
 
-async function send(url, method, body) {
+export async function send(url, method, body) {
   const response = await fetch(url, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
@@ -167,7 +167,7 @@ export function LineHeader({ line, riders }) {
       <span style={{ color: "#64748b" }}>
         {SHIFTS[line.shift]} — {riders} أطفال
       </span>
-      <span style={{ marginInlineStart: "auto", display: "flex", gap: "6px" }}>
+      <span className="no-print" style={{ marginInlineStart: "auto", display: "flex", gap: "6px" }}>
         <button type="button" onClick={startEditing} disabled={busy}>✎ تعديل</button>
         <button type="button" onClick={remove} disabled={busy} style={{ color: "#b91c1c" }}>حذف</button>
       </span>

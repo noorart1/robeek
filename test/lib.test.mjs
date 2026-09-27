@@ -122,3 +122,14 @@ test("backup file names: only our own, never a path", () => {
     ""
   ]) assert.ok(!isBackupName(name), name);
 });
+
+test("validateRiders accepts an ordered id list and rejects anything else", async () => {
+  const { validateRiders } = await import("../lib/transport-lines.js");
+
+  assert.deepEqual(validateRiders({ studentIds: [3, 1, 7] }), { studentIds: [3, 1, 7] });
+  assert.deepEqual(validateRiders({ studentIds: [] }), { studentIds: [] });
+
+  for (const bad of [null, {}, { studentIds: "1" }, { studentIds: [1, 1] }, { studentIds: [0] }, { studentIds: ["2"] }, { studentIds: [1.5] }]) {
+    assert.ok(validateRiders(bad).error, JSON.stringify(bad));
+  }
+});

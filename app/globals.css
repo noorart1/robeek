@@ -49,6 +49,16 @@ textarea {
     background: #ffffff !important;
   }
 
+  /* Transport lines: one list per sheet, for the driver. */
+  .lines-grid {
+    display: block !important;
+  }
+
+  .line-card {
+    break-after: page;
+    overflow: visible !important;
+  }
+
   .receipt {
     margin: 0 auto !important;
     box-shadow: none !important;

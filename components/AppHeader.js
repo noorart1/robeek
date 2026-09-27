@@ -16,6 +16,7 @@ const links = [
 export default function AppHeader({ user, active }) {
   return (
     <header
+      className="no-print"
       style={{
         display: "flex",
         alignItems: "center",
