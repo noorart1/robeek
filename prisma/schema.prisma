@@ -89,6 +89,7 @@ model Payment {
   amount       Decimal    @db.Decimal(15, 2)
   paymentDate  DateTime   @default(now())
   paymentType  String?
+  paymentMethod String?   @db.VarChar(20)
   receiptNo    String?    @unique
   description  String?    @db.Text
   createdAt    DateTime   @default(now())
@@ -183,4 +184,58 @@ enum User_role {
   DEPUTY
   REGISTRAR
   TEACHER
+}
+
+// الكادر: staff of the centre. Not sign-in accounts (those are User).
+model Staff {
+  id         Int       @id @default(autoincrement())
+  name       String
+  birthDate  DateTime? @db.Date
+  address    String?   @db.VarChar(500)
+  phone      String?   @db.VarChar(30)
+  education  String?
+  shift      String?   @db.VarChar(20)
+  job        String?
+  baseSalary Decimal?  @db.Decimal(15, 2)
+  bonus      Decimal?  @db.Decimal(15, 2)
+  startDate  DateTime? @db.Date
+  contract   String?
+  notes      String?   @db.Text
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime
+  Salary     Salary[]
+}
+
+// One salary per staff member per calendar month ("2026-09").
+model Salary {
+  id            Int       @id @default(autoincrement())
+  staffId       Int
+  month         String    @db.Char(7)
+  baseSalary    Decimal   @db.Decimal(15, 2)
+  bonus         Decimal   @default(0) @db.Decimal(15, 2)
+  deduction     Decimal   @default(0) @db.Decimal(15, 2)
+  paidOn        DateTime? @db.Date
+  paymentMethod String?   @db.VarChar(20)
+  notes         String?   @db.VarChar(500)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime
+  Staff         Staff     @relation(fields: [staffId], references: [id])
+
+  @@unique([staffId, month])
+}
+
+// المصاريف: GENERAL (المصاريف العامة) or ASSET (الأصول والتطوير).
+model Expense {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @db.Date
+  category      String   @default("GENERAL") @db.VarChar(20)
+  item          String
+  amount        Decimal  @db.Decimal(15, 2)
+  paymentMethod String?  @db.VarChar(20)
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
+
+  @@index([date])
 }

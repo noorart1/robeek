@@ -8,6 +8,7 @@ import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 import { formatDate } from "../lib/arabic";
 import {
   ATTENDANCE_TYPES,
+  PAYMENT_METHODS,
   PAYMENT_PLANS,
   PAYMENT_TYPES,
   classLabel,
@@ -30,7 +31,6 @@ function studentFields(lines, isNew) {
       ltr: true
     },
     { name: "birthYear", label: "المواليد (السنة)", max: 4, ltr: true },
-    { name: "birthDate", label: "تاريخ الميلاد الكامل", type: "date" },
     {
       name: "gender",
       label: "الجنس",
@@ -41,7 +41,6 @@ function studentFields(lines, isNew) {
       ]
     },
     { name: "nationalId", label: "الرقم الوطني", max: 30, ltr: true },
-    { name: "phone", label: "رقم الهاتف", max: 30, ltr: true },
     { name: "emergencyPhone", label: "هاتف الطوارئ", max: 30, ltr: true },
     {
       name: "transportLineId",
@@ -69,10 +68,8 @@ function valuesOf(student) {
     lastName: student.lastName ?? "",
     studentCode: student.studentCode ?? "",
     birthYear: student.birthYear ? String(student.birthYear) : "",
-    birthDate: String(student.birthDate ?? "").slice(0, 10),
     gender: student.gender ?? "",
     nationalId: student.nationalId ?? "",
-    phone: student.phone ?? "",
     emergencyPhone: student.emergencyPhone ?? "",
     transportLineId: student.transportLine ? String(student.transportLine.id) : "",
     status: student.status ?? "ACTIVE",
@@ -772,14 +769,15 @@ export default function StudentDialog({
 
 // الدفعات: each payment is saved immediately, separately from the form.
 function Payments({ student, onSaved, disabled }) {
-  const [draft, setDraft] = useState({ amount: "", paymentType: "TUITION", description: "" });
+  // enrollmentId "": the current year; otherwise an earlier year's debt.
+  const [draft, setDraft] = useState({ amount: "", paymentType: "TUITION", paymentMethod: "CASH", description: "", enrollmentId: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // The payment just recorded, offered for printing.
   const [lastReceipt, setLastReceipt] = useState(null);
 
   const enrollment = student.enrollment;
-  const { tuitionFee, totalPaid, remaining, curriculumPaid, overdue, nextDue } = student.financial;
+  const { tuitionFee, totalPaid, remaining, curriculumPaid, overdue, nextDue, previousDue = [] } = student.financial;
 
   async function add(event) {
     event.preventDefault();
@@ -794,7 +792,7 @@ function Payments({ student, onSaved, disabled }) {
 
       onSaved(data.student);
       setLastReceipt(data.payment);
-      setDraft({ amount: "", paymentType: draft.paymentType, description: "" });
+      setDraft({ ...draft, amount: "", description: "", enrollmentId: "" });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -825,12 +823,18 @@ function Payments({ student, onSaved, disabled }) {
     }
   }
 
+  // A child who has left owes nothing more: show only what was agreed and paid.
+  const active = student.status === "ACTIVE";
   const summary = [
     ["المبلغ الإجمالي", tuitionFee],
     ["الواصل", totalPaid, "#15803d"],
-    ["الباقي", remaining, remaining > 0 ? "#b91c1c" : undefined],
-    ["متأخر حتى اليوم", overdue, overdue > 0 ? "#b91c1c" : "#15803d"],
-    ["المنهج والزي", curriculumPaid]
+    ...(active
+      ? [
+          ["الباقي", remaining, remaining > 0 ? "#b91c1c" : undefined],
+          ["متأخر حتى اليوم", overdue, overdue > 0 ? "#b91c1c" : "#15803d"],
+          ["المنهج والزي", curriculumPaid]
+        ]
+      : [])
   ];
 
   const cell = { padding: "6px 8px", borderBottom: "1px solid #f1f5f9", textAlign: "right" };
@@ -849,7 +853,14 @@ function Payments({ student, onSaved, disabled }) {
         ))}
       </div>
 
-      {nextDue && (
+      {active && previousDue.map((due) => (
+        <p key={due.enrollmentId} style={{ margin: "0 0 6px", color: "#b91c1c", fontSize: "13px" }}>
+          باقي من السنة <span dir="ltr">{due.year}</span>: <strong>{formatMoney(due.remaining)}</strong> د.ع
+          (محسوب ضمن المتأخر؛ سجّل دفعته «عن» تلك السنة)
+        </p>
+      ))}
+
+      {active && nextDue && (
         <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: "13px" }}>
           القسط القادم: {formatMoney(nextDue.amount)} د.ع في {formatDate(nextDue.day)}
         </p>
@@ -868,6 +879,16 @@ function Payments({ student, onSaved, disabled }) {
         <p style={{ color: "#64748b" }}>اختر الشعبة واحفظ أولاً لتسجيل الدفعات.</p>
       ) : (
         <>
+          {enrollment.payments.some((p) => !p.voidedAt) && (
+            <button
+              type="button"
+              onClick={() => window.open(`/dashboard/receipts/student/${student.id}`, "_blank", "noopener")}
+              style={{ marginBottom: "8px" }}
+            >
+              طباعة كل الوصولات
+            </button>
+          )}
+
           {enrollment.payments.length > 0 && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
@@ -876,6 +897,7 @@ function Payments({ student, onSaved, disabled }) {
                     <th style={cell}>الوصل</th>
                     <th style={cell}>التاريخ</th>
                     <th style={cell}>النوع</th>
+                    <th style={cell}>نوع الدفع</th>
                     <th style={{ ...cell, textAlign: "left" }}>المبلغ</th>
                     <th style={cell}>الفترة / ملاحظة</th>
                     <th style={cell} />
@@ -891,7 +913,10 @@ function Payments({ student, onSaved, disabled }) {
                         <td style={{ ...cell, ...struck }} dir="ltr">{payment.receiptNo || "—"}</td>
                         <td style={{ ...cell, ...struck }}>{formatDate(payment.paymentDate)}</td>
                         <td style={{ ...cell, ...struck }}>{PAYMENT_TYPES[payment.paymentType] || "قسط"}</td>
-                        <td style={{ ...cell, ...struck, textAlign: "left" }}>{formatMoney(payment.amount)}</td>
+                        <td style={{ ...cell, ...struck }}>{PAYMENT_METHODS[payment.paymentMethod] || "—"}</td>
+                        <td style={{ ...cell, ...(payment.paymentType === "REFUND" && { color: "#b91c1c" }), ...struck, textAlign: "left" }}>
+                          {payment.paymentType === "REFUND" ? "−" : ""}{formatMoney(payment.amount)}
+                        </td>
                         <td style={cell}>
                           <span style={struck}>{payment.description || ""}</span>
                           {voided && (
@@ -901,16 +926,14 @@ function Payments({ student, onSaved, disabled }) {
                           )}
                         </td>
                         <td style={{ ...cell, whiteSpace: "nowrap" }}>
-                          <a
-                            href={`/dashboard/receipts/${payment.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label="طباعة الوصل"
+                          <button
+                            type="button"
+                            onClick={() => window.open(`/dashboard/receipts/${payment.id}`, "_blank", "noopener")}
                             title="طباعة الوصل"
-                            style={{ textDecoration: "none", marginInlineEnd: "6px" }}
+                            style={{ marginInlineEnd: "6px" }}
                           >
-                            🖨
-                          </a>
+                            طباعة
+                          </button>
                           {!voided && (
                             <button
                               type="button"
@@ -949,6 +972,29 @@ function Payments({ student, onSaved, disabled }) {
               style={control}
             >
               {Object.entries(PAYMENT_TYPES).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            {previousDue.length > 0 && (
+              <select
+                aria-label="عن السنة الدراسية"
+                value={draft.enrollmentId}
+                onChange={(e) => setDraft((d) => ({ ...d, enrollmentId: e.target.value }))}
+                style={control}
+              >
+                <option value="">عن {enrollment.academicYear.name}</option>
+                {previousDue.map((due) => (
+                  <option key={due.enrollmentId} value={due.enrollmentId}>عن {due.year} (باقي {formatMoney(due.remaining)})</option>
+                ))}
+              </select>
+            )}
+            <select
+              aria-label="نوع الدفع"
+              value={draft.paymentMethod}
+              onChange={(e) => setDraft((d) => ({ ...d, paymentMethod: e.target.value }))}
+              style={control}
+            >
+              {Object.entries(PAYMENT_METHODS).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>

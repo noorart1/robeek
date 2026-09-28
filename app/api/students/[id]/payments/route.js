@@ -2,7 +2,7 @@
 import prisma from "../../../../../lib/prisma";
 import { getCurrentUser } from "../../../../../lib/auth";
 import { parseAmount } from "../../../../../lib/digits";
-import { PAYMENT_TYPES } from "../../../../../lib/labels";
+import { PAYMENT_METHODS, PAYMENT_TYPES } from "../../../../../lib/labels";
 import { loadStudent } from "../../../../../lib/student-data";
 
 export const runtime = "nodejs";
@@ -68,14 +68,27 @@ export async function POST(request, { params }) {
       return errorResponse("نوع الدفعة غير صالح.", 400, { field: "paymentType" });
     }
 
+    const paymentMethod = body.paymentMethod || "CASH";
+
+    if (!(paymentMethod in PAYMENT_METHODS)) {
+      return errorResponse("نوع الدفع غير صالح.", 400, { field: "paymentMethod" });
+    }
+
     const description =
       typeof body.description === "string" && body.description.trim()
         ? body.description.trim().slice(0, 500)
         : null;
 
-    // Active academic year first, otherwise the newest enrollment.
+    // enrollmentId: paying off an earlier year («عن» that year). Otherwise
+    // the active academic year first, then the newest enrollment.
+    const enrollmentId = body.enrollmentId ? Number(body.enrollmentId) : null;
+
+    if (enrollmentId !== null && (!Number.isSafeInteger(enrollmentId) || enrollmentId <= 0)) {
+      return errorResponse("السنة الدراسية غير صالحة.", 400, { field: "enrollmentId" });
+    }
+
     const enrollment = await prisma.enrollment.findFirst({
-      where: { studentId },
+      where: { studentId, ...(enrollmentId && { id: enrollmentId }) },
       orderBy: [{ AcademicYear: { isActive: "desc" } }, { id: "desc" }],
       include: { AcademicYear: { select: { name: true } } }
     });
@@ -90,6 +103,7 @@ export async function POST(request, { params }) {
           enrollmentId: enrollment.id,
           amount,
           paymentType,
+          paymentMethod,
           description,
           receiptNo: await nextReceiptNo(tx, enrollment.AcademicYear.name)
         },

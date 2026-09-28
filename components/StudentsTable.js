@@ -7,7 +7,7 @@ import ParentLinkCell from "./ParentLinkCell";
 import StudentDialog from "./StudentDialog";
 import StudentPhoto from "./StudentPhoto";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
-import { formatDate, matchesSearch } from "../lib/arabic";
+import { matchesSearch } from "../lib/arabic";
 import {
   SHIFTS,
   attendanceLabel,
@@ -37,19 +37,13 @@ const columns = [
   { field: "status", label: "الحالة", kind: "edit", type: "status" },
   { field: "gender", label: "الجنس", kind: "edit", type: "gender" },
   { field: "nationalId", label: "الرقم الوطني", kind: "edit" },
-  { field: "phone", label: "رقم الهاتف", kind: "edit" },
-  { field: "emergencyPhone", label: "هاتف الطوارئ", kind: "edit" },
-  { field: "birthDate", label: "تاريخ الميلاد", kind: "edit", type: "date" }
+  { field: "emergencyPhone", label: "هاتف الطوارئ", kind: "edit" }
 ];
 
 const moneyFields = columns.filter((c) => c.kind === "money").map((c) => c.field);
 
 function displayValue(student, field) {
   const value = student[field];
-
-  if (field === "birthDate") {
-    return value ? String(value).slice(0, 10) : "";
-  }
 
   return value === null || value === undefined ? "" : String(value);
 }
@@ -288,10 +282,10 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
               ? column.value(student)
               : column.kind === "money"
                 ? ""
-                : column.field === "birthDate"
-                  ? formatDate(student[column.field])
-                  : displayValue(student, column.field)
+                : displayValue(student, column.field)
         ),
+        // Not a column any more, still searchable.
+        student.phone,
         student.reviewNote
       ].join(" ");
 

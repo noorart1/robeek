@@ -7,6 +7,8 @@ import { iraqToday, isWeekend, parseDay } from "../../lib/dates";
 import { activeAcademicYear } from "../../lib/student-data";
 import AppHeader from "../../components/AppHeader";
 import TeacherCell from "../../components/TeacherCell";
+import NewYearButton from "../../components/NewYearButton";
+import { nextYearName } from "../../lib/finance";
 
 export const dynamic = "force-dynamic";
 
@@ -82,8 +84,9 @@ export default async function DashboardPage() {
           مرحباً، {user.fullName}
         </h1>
         {year && (
-          <p style={{ color: "#64748b", marginTop: 0 }}>
-            السنة الدراسية <span dir="ltr">{year.name}</span>
+          <p style={{ color: "#64748b", marginTop: 0, display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+            <span>السنة الدراسية <span dir="ltr">{year.name}</span></span>
+            {nextYearName(year.name) && iraqToday() >= `${nextYearName(year.name).slice(0, 4)}-07-01` && <NewYearButton next={nextYearName(year.name)} current={year.name} />}
           </p>
         )}
 

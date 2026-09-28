@@ -1,0 +1,57 @@
+
+import prisma from "../../../../lib/prisma";
+import { getCurrentUser } from "../../../../lib/auth";
+import { errorResponse, readBody } from "../../../../lib/users";
+import { checkExpense, formatExpense } from "../../../../lib/finance";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+async function expenseId(params) {
+  const id = Number((await params).id);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+//   PATCH { every field of the form }
+
+export async function PATCH(request, { params }) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+
+    const id = await expenseId(params);
+    if (!id) return errorResponse("معرّف المصروف غير صالح.", 400);
+
+    const body = await readBody(request);
+    if (!body) return errorResponse("البيانات المرسلة غير صالحة.", 400);
+
+    const checked = checkExpense(body);
+    if (checked.error) return errorResponse(checked.error, 400, { field: checked.field });
+
+    const expense = await prisma.expense.update({ where: { id }, data: { ...checked.data, updatedAt: new Date() } });
+
+    return Response.json({ expense: formatExpense(expense) }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    if (error.code === "P2025") return errorResponse("المصروف غير موجود.", 404);
+    console.error("Expense PATCH error:", error);
+    return errorResponse("حدث خطأ أثناء حفظ المصروف.", 500);
+  }
+}
+
+export async function DELETE(request, { params }) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+
+    const id = await expenseId(params);
+    if (!id) return errorResponse("معرّف المصروف غير صالح.", 400);
+
+    await prisma.expense.delete({ where: { id } });
+
+    return Response.json({ success: true }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    if (error.code === "P2025") return errorResponse("المصروف غير موجود.", 404);
+    console.error("Expense DELETE error:", error);
+    return errorResponse("حدث خطأ أثناء حذف المصروف.", 500);
+  }
+}

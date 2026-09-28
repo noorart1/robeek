@@ -201,6 +201,22 @@ has a photo. The importer never silently corrects data: incomplete phones,
 possible duplicates and missing fees go into `Student.reviewNote`, shown in
 the table as ⚠ with a "needs review" filter. Delete the JSON afterwards.
 
+### Importing the accounts workbook
+
+`RubikAccountsFile.xlsx` (the summer 2026 accounts, gitignored) goes into
+the `Expense` ledger, `Staff` and `Salary`. Run it once per database, after
+the `staff` and `expenses` migrations:
+
+```
+python scripts/accounts-xlsx-to-sql.py RubikAccountsFile.xlsx /tmp/accounts.sql
+mysql --default-character-set=utf8mb4 <db> < /tmp/accounts.sql && rm /tmp/accounts.sql
+```
+
+It inserts nothing while `Expense` or `Salary` has rows (`--replace`
+empties both first, manual entries included). Excel stored many dates
+with day and month swapped; the script resolves them from neighbouring
+rows and marks every guess with ⚠ in the row's notes and in its report.
+
 Host address, SSH user, and concrete paths live in **`CLAUDE.local.md`**, which
 is gitignored. Credentials — the SSH key and the database password — live in
 neither file: use a password manager, and keep `.env` gitignored.

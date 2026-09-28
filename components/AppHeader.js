@@ -7,6 +7,7 @@ const links = [
   { href: "/dashboard", label: "الرئيسية", roles: ["ADMIN"] },
   { href: "/dashboard/students", label: "الأطفال", roles: ["ADMIN"] },
   { href: "/dashboard/attendance", label: "الحضور", roles: ["ADMIN", "TEACHER"] },
+  { href: "/dashboard/staff", label: "الكادر", roles: ["ADMIN"] },
   { href: "/dashboard/finance", label: "المالية", roles: ["ADMIN"] },
   { href: "/dashboard/lines", label: "الخطوط", roles: ["ADMIN"] },
   { href: "/dashboard/users", label: "المستخدمون", roles: ["ADMIN"] },
