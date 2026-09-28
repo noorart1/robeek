@@ -3,21 +3,30 @@ import { formatDate } from "../lib/arabic";
 import { iraqToday } from "../lib/dates";
 import { amountInWords } from "../lib/tafqeet";
 import { PAYMENT_TYPES, classLabel, formatMoney, fullName, parentName } from "../lib/labels";
+import { REFUND_TYPES } from "../lib/finance";
 
 const row = { display: "flex", gap: "8px", padding: "7px 0", borderBottom: "1px dotted #cbd5e1" };
 const key = { minWidth: "130px", color: "#475569" };
 
 // وصل قبض: one payment, laid out for printing on A5/A4.
 // student is loadStudent()'s result; remaining is as of today.
+// payment.enrollmentId, when given, may be an earlier school year («عن»
+// that year): the receipt then shows that year and what is left of it.
 export default function Receipt({ payment, student }) {
   const cls = student.enrollment?.class;
   const amount = Number(payment.amount);
   const payer = parentName(student.father) || "ولي أمر الطفل";
   // A refund prints as وصل صرف: the school pays the parent.
-  const refund = payment.paymentType === "REFUND";
+  const refund = REFUND_TYPES.includes(payment.paymentType);
+  const tuition = !["CURRICULUM", "CURRICULUM_REFUND"].includes(payment.paymentType);
+
+  const earlier = payment.enrollmentId && student.enrollment && payment.enrollmentId !== student.enrollment.id;
+  const earlierDue = earlier && student.financial.previousDue.find((d) => d.enrollmentId === payment.enrollmentId);
+  const yearName = earlier ? payment.yearName : student.enrollment?.academicYear?.name;
+  const remaining = earlier ? earlierDue?.remaining ?? 0 : student.financial.remaining;
 
   return (
-    <ReceiptFrame student={student} title={refund ? "وصل صرف" : "وصل قبض"} number={payment.receiptNo || "—"}>
+    <ReceiptFrame yearName={yearName} title={refund ? "وصل صرف" : "وصل قبض"} number={payment.receiptNo || "—"}>
 
       <section className="receipt-body" style={{ marginTop: "14px", fontSize: "16px" }}>
         <div className="receipt-row" style={row}>
@@ -49,11 +58,11 @@ export default function Receipt({ payment, student }) {
             <strong>{fullName(student)}</strong> ({student.studentCode}){cls ? ` — ${classLabel(cls)}` : ""}
           </span>
         </div>
-        {payment.paymentType !== "CURRICULUM" && (
+        {tuition && (
           <div className="receipt-row" style={row}>
             <span style={key}>المتبقي من الرسوم:</span>
             <span dir="ltr">
-              {formatMoney(student.financial.remaining)} د.ع
+              {formatMoney(remaining)} د.ع
               <small style={{ color: "#64748b" }}> (حتى {formatDate(iraqToday())})</small>
             </span>
           </div>
@@ -108,7 +117,7 @@ export default function Receipt({ payment, student }) {
 }
 
 // The receipt's border and letterhead, shared with the all-receipts statement.
-export function ReceiptFrame({ student, title, number, children }) {
+export function ReceiptFrame({ yearName, title, number, children }) {
   return (
     <main
       className="receipt"
@@ -128,9 +137,9 @@ export function ReceiptFrame({ student, title, number, children }) {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: "20px", fontWeight: 700, color: "#1e40af" }}>مركز روبيك للتعليم المبكر</div>
           <div style={{ color: "#64748b" }}>
-            {student.enrollment?.academicYear?.name && (
+            {yearName && (
               // dir="ltr": after Arabic text "2025-2026" would render as 2026-2025.
-              <>السنة الدراسية <span dir="ltr">{student.enrollment.academicYear.name}</span></>
+              <>السنة الدراسية <span dir="ltr">{yearName}</span></>
             )}
           </div>
         </div>

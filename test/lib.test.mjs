@@ -221,3 +221,19 @@ test("school years: the next one, and the months each covers", async () => {
   assert.deepEqual(yearMonths("2025-2026"), { from: "2025-09", to: "2026-08" });
   assert.equal(yearMonths(undefined), null);
 });
+
+test("paid totals: refunds subtract from their own kind, voided never count", async () => {
+  const { paidTotals } = await import("../lib/finance.js");
+
+  assert.deepEqual(
+    paidTotals([
+      { amount: 500, paymentType: "TUITION" },
+      { amount: 200, paymentType: null },
+      { amount: 100, paymentType: "REFUND" },
+      { amount: 80, paymentType: "CURRICULUM" },
+      { amount: 30, paymentType: "CURRICULUM_REFUND" },
+      { amount: 999, paymentType: "TUITION", voidedAt: "2026-09-01" }
+    ]),
+    { tuition: 600, curriculum: 50 }
+  );
+});

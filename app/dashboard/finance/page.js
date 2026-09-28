@@ -3,7 +3,8 @@ import prisma from "../../../lib/prisma";
 import { requirePageUser } from "../../../lib/auth";
 import { SHIFTS, classLabel, formatMoney } from "../../../lib/labels";
 import { formatStudent, studentSelect } from "../../../lib/student-data";
-import { monthlySummary, yearMonths } from "../../../lib/finance";
+import { PARTNERS, monthlySummary, paidTotals, yearMonths } from "../../../lib/finance";
+import { matchesSearch } from "../../../lib/arabic";
 import { iraqToday } from "../../../lib/dates";
 import { netSalary } from "../../../lib/staff";
 import Link from "next/link";
@@ -12,6 +13,8 @@ import SalariesBoard from "../../../components/SalariesBoard";
 import ExpensesBoard from "../../../components/ExpensesBoard";
 
 export const dynamic = "force-dynamic";
+
+const dayMonth = (date) => new Date(date).toISOString().slice(0, 7);
 
 const TABS = { summary: "الملخص", salaries: "الرواتب", expenses: "المصاريف والحركات" };
 
@@ -55,15 +58,9 @@ function add(totals, enrollment) {
   totals.students += 1;
   totals.fee += Number(enrollment.tuitionFee);
 
-  for (const payment of enrollment.Payment) {
-    if (payment.paymentType === "CURRICULUM") {
-      totals.curriculum += Number(payment.amount);
-    } else if (payment.paymentType === "REFUND") {
-      totals.paid -= Number(payment.amount);
-    } else {
-      totals.paid += Number(payment.amount);
-    }
-  }
+  const paid = paidTotals(enrollment.Payment);
+  totals.paid += paid.tuition;
+  totals.curriculum += paid.curriculum;
 }
 
 // remaining: null hides it (children who have left owe nothing more).
@@ -120,7 +117,7 @@ export default async function FinancePage({ searchParams }) {
       select: { amount: true, paymentType: true, paymentMethod: true, paymentDate: true }
     }),
     prisma.salary.findMany({ select: { month: true, baseSalary: true, bonus: true, deduction: true } }),
-    prisma.expense.findMany({ select: { date: true, category: true, amount: true } })
+    prisma.expense.findMany({ select: { date: true, category: true, amount: true, item: true } })
   ]);
   const months = monthlySummary({
     payments: allPayments,
@@ -142,6 +139,23 @@ export default async function FinancePage({ searchParams }) {
     ["withdrawals", "سحب الشركاء"]
   ];
   const monthTotal = (key) => months.reduce((sum, m) => sum + m[key], 0);
+
+  // الصندوق وحصص الشركاء, as the workbook's «الرئيسية» worked them out:
+  // what is not handed to the management stays in the centre's box; the
+  // management's box is what it received less the partners' draws; each
+  // partner is due their share of the net and has drawn so much.
+  const net = monthTotal("net");
+  const handovers = monthTotal("handovers");
+  const withdrawals = monthTotal("withdrawals");
+  const draws = allExpenses.filter(
+    (e) => e.category === "WITHDRAWAL" &&
+      (!range || (dayMonth(e.date) >= range.from && dayMonth(e.date) <= range.to))
+  );
+  const partners = PARTNERS.map((p) => {
+    const taken = draws.filter((e) => matchesSearch(e.item, p.name)).reduce((t, e) => t + Number(e.amount), 0);
+    return { ...p, due: net * p.share, taken, left: net * p.share - taken };
+  });
+  const unassigned = withdrawals - partners.reduce((t, p) => t + p.taken, 0);
 
   const enrollments = year
     ? await prisma.enrollment.findMany({
@@ -338,6 +352,64 @@ export default async function FinancePage({ searchParams }) {
               </tr>
             </tfoot>
           </table>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+          <section>
+            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الصندوق</h2>
+            <div style={box}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  {[
+                    ["الصافي", net],
+                    ["سُلّم إلى الإدارة", -handovers],
+                    ["صندوق المركز (الصافي − التسليم)", net - handovers, true],
+                    ["صندوق الإدارة (التسليم − سحب الشركاء)", handovers - withdrawals, true]
+                  ].map(([label, value, strong]) => (
+                    <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
+                      <td style={cell}>{label}</td>
+                      <td style={{ ...money, color: value < 0 ? "#b91c1c" : undefined }}>{formatMoney(value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section>
+            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>حصص الشركاء</h2>
+            <div style={box}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
+                    <th style={cell}>الشريك</th>
+                    <th style={money}>النسبة</th>
+                    <th style={money}>الاستحقاق</th>
+                    <th style={money}>السحب</th>
+                    <th style={money}>الباقي</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {partners.map((p) => (
+                    <tr key={p.name}>
+                      <td style={cell}>{p.name}</td>
+                      <td style={money}>{(p.share * 100).toLocaleString("en-US")}%</td>
+                      <td style={money}>{formatMoney(Math.round(p.due))}</td>
+                      <td style={money}>{formatMoney(p.taken)}</td>
+                      <td style={{ ...money, fontWeight: 600, color: p.left < 0 ? "#b91c1c" : "#15803d" }}>{formatMoney(Math.round(p.left))}</td>
+                    </tr>
+                  ))}
+                  {unassigned !== 0 && (
+                    <tr>
+                      <td style={{ ...cell, color: "#b45309" }} colSpan={3}>سحب لا يحمل اسم شريك</td>
+                      <td style={money}>{formatMoney(unassigned)}</td>
+                      <td style={cell} />
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </main>
     </>

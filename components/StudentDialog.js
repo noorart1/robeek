@@ -15,6 +15,7 @@ import {
   formatMoney,
   fullName
 } from "../lib/labels";
+import { REFUND_TYPES } from "../lib/finance";
 
 // Student fields, saved with PATCH /api/students/[id] { fields }.
 function studentFields(lines, isNew) {
@@ -914,8 +915,8 @@ function Payments({ student, onSaved, disabled }) {
                         <td style={{ ...cell, ...struck }}>{formatDate(payment.paymentDate)}</td>
                         <td style={{ ...cell, ...struck }}>{PAYMENT_TYPES[payment.paymentType] || "قسط"}</td>
                         <td style={{ ...cell, ...struck }}>{PAYMENT_METHODS[payment.paymentMethod] || "—"}</td>
-                        <td style={{ ...cell, ...(payment.paymentType === "REFUND" && { color: "#b91c1c" }), ...struck, textAlign: "left" }}>
-                          {payment.paymentType === "REFUND" ? "−" : ""}{formatMoney(payment.amount)}
+                        <td style={{ ...cell, ...(REFUND_TYPES.includes(payment.paymentType) && { color: "#b91c1c" }), ...struck, textAlign: "left" }}>
+                          {REFUND_TYPES.includes(payment.paymentType) ? "−" : ""}{formatMoney(payment.amount)}
                         </td>
                         <td style={cell}>
                           <span style={struck}>{payment.description || ""}</span>

@@ -8,6 +8,7 @@ import { loadStudent } from "../../../../../lib/student-data";
 import AppHeader from "../../../../../components/AppHeader";
 import PrintButton from "../../../../../components/PrintButton";
 import { ReceiptFrame } from "../../../../../components/Receipt";
+import { REFUND_TYPES } from "../../../../../lib/finance";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function StudentReceiptsPage({ params }) {
         </div>
       </div>
 
-      <ReceiptFrame student={student} title="كشف الوصولات" number={student.studentCode}>
+      <ReceiptFrame yearName={student.enrollment?.academicYear?.name} title="كشف الوصولات" number={student.studentCode}>
         <section className="receipt-body" style={{ marginTop: "14px", fontSize: "15px" }}>
           <p style={{ margin: "0 0 8px" }}>
             للطفل/ة: <strong>{fullName(student)}</strong>{cls ? ` — ${classLabel(cls)}` : ""}
@@ -79,7 +80,7 @@ export default async function StudentReceiptsPage({ params }) {
                     <td style={cell}>{PAYMENT_TYPES[payment.paymentType] || "قسط"}</td>
                     <td style={cell}>{PAYMENT_METHODS[payment.paymentMethod] || "—"}</td>
                     <td style={money} dir="ltr">
-                      {payment.paymentType === "REFUND" ? "−" : ""}{formatMoney(payment.amount)}
+                      {REFUND_TYPES.includes(payment.paymentType) ? "−" : ""}{formatMoney(payment.amount)}
                     </td>
                     <td style={cell}>{payment.description || ""}</td>
                   </tr>

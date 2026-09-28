@@ -4,6 +4,7 @@ import { getCurrentUser } from "../../../../../lib/auth";
 import { parseAmount } from "../../../../../lib/digits";
 import { PAYMENT_METHODS, PAYMENT_TYPES } from "../../../../../lib/labels";
 import { loadStudent } from "../../../../../lib/student-data";
+import { REFUND_TYPES, paidTotals } from "../../../../../lib/finance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,6 +96,20 @@ export async function POST(request, { params }) {
 
     if (!enrollment) {
       return errorResponse("يرجى تسجيل الطفل في شعبة قبل إضافة دفعة.", 400);
+    }
+
+    // A refund can only give back what was paid, that year and of that kind.
+    if (REFUND_TYPES.includes(paymentType)) {
+      const paid = paidTotals(await prisma.payment.findMany({ where: { enrollmentId: enrollment.id } }));
+      const available = paymentType === "REFUND" ? paid.tuition : paid.curriculum;
+
+      if (amount > available) {
+        return errorResponse(
+          `لا يمكن استرجاع أكثر من المدفوع (${available.toLocaleString("en-US")} د.ع).`,
+          400,
+          { field: "amount" }
+        );
+      }
     }
 
     const payment = await prisma.$transaction(async (tx) =>

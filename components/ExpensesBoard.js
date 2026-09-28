@@ -6,7 +6,10 @@ import { control, send } from "./StaffManager";
 import { formatDate } from "../lib/arabic";
 import { iraqToday } from "../lib/dates";
 import { PAYMENT_METHODS, formatMoney } from "../lib/labels";
-import { EXPENSE_CATEGORIES, EXPENSE_ITEMS } from "../lib/finance";
+import { EXPENSE_CATEGORIES, EXPENSE_ITEMS, PARTNERS } from "../lib/finance";
+
+// A partner's draw must name them to count in حصص الشركاء.
+const ITEMS = [...EXPENSE_ITEMS, ...PARTNERS.map((p) => `سحب ${p.name}`), "تسليم الإدارة"];
 
 const cell = { padding: "7px 8px", borderBottom: "1px solid #e2e8f0", textAlign: "right", whiteSpace: "nowrap" };
 const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums" };
@@ -101,7 +104,7 @@ export default function ExpensesBoard() {
         style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", padding: "12px", backgroundColor: "#ffffff", borderRadius: "12px", marginBottom: "12px" }}
       >
         <strong style={{ color: "#1e40af", width: "100%" }}>{editingId ? "تعديل مصروف" : "مصروف جديد"}</strong>
-        <datalist id="expense-items">{EXPENSE_ITEMS.map((i) => <option key={i} value={i} />)}</datalist>
+        <datalist id="expense-items">{ITEMS.map((i) => <option key={i} value={i} />)}</datalist>
         <input type="date" aria-label="التاريخ" required value={form.date} onChange={(e) => set("date", e.target.value)} style={{ ...control, ...border("date") }} />
         <input aria-label="بند المصروف" placeholder="بند المصروف" list="expense-items" required maxLength={191} value={form.item} onChange={(e) => set("item", e.target.value)} style={{ ...control, ...border("item"), width: "150px" }} />
         <select aria-label="النوع" value={form.category} onChange={(e) => set("category", e.target.value)} style={control}>

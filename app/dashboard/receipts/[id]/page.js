@@ -17,7 +17,7 @@ export default async function ReceiptPage({ params }) {
   const payment = Number.isSafeInteger(paymentId) && paymentId > 0
     ? await prisma.payment.findUnique({
         where: { id: paymentId },
-        include: { Enrollment: { select: { studentId: true } } }
+        include: { Enrollment: { select: { studentId: true, AcademicYear: { select: { name: true } } } } }
       })
     : null;
 
@@ -37,7 +37,7 @@ export default async function ReceiptPage({ params }) {
         </div>
       </div>
 
-      <Receipt payment={payment} student={student} />
+      <Receipt payment={{ ...payment, yearName: payment.Enrollment.AcademicYear.name }} student={student} />
     </>
   );
 }
