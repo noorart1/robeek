@@ -17,7 +17,7 @@ export default async function StaffPage() {
       <main style={{ maxWidth: "1200px", margin: "24px auto", padding: "0 20px" }}>
         <h1 style={{ color: "#1e40af", marginBottom: "4px" }}>الكادر</h1>
         <p style={{ color: "#64748b", marginTop: 0 }}>
-          تسجيل الرواتب الشهرية من <Link href="/dashboard/finance?tab=salaries">المالية ← الرواتب</Link>.
+          تسجيل الرواتب الشهرية من <Link href="/dashboard/finance?tab=salaries">المالية ← رواتب الموظفين</Link>.
         </p>
 
         <StaffManager />

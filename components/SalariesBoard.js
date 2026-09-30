@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { StaffDialog, control, send } from "./StaffManager";
 import { iraqToday } from "../lib/dates";
+import { formatDate } from "../lib/arabic";
 import { parseAmount } from "../lib/digits";
 import { PAYMENT_METHODS, SHIFTS, formatMoney } from "../lib/labels";
 import { JOB_SUGGESTIONS, netSalary } from "../lib/staff";
@@ -112,6 +113,18 @@ export default function SalariesBoard() {
             </tfoot>
           </table>
         </div>
+      )}
+
+      {data?.lumps?.length > 0 && (
+        <p style={{ marginTop: "12px", padding: "10px 14px", backgroundColor: "#fffbeb", borderRadius: "8px" }}>
+          رواتب مسجلة في دفتر الحسابات كمبلغ إجمالي فقط (قبل تسجيل الرواتب لكل موظف):{" "}
+          {data.lumps.map((e) => (
+            <span key={e.id} style={{ marginInlineEnd: "12px" }}>
+              {formatDate(e.date)} — {e.item}: <strong>{formatMoney(e.amount)}</strong> د.ع{e.notes ? ` (${e.notes})` : ""}
+            </span>
+          ))}
+          <br /><small style={{ color: "#64748b" }}>تُحسب في «الملخص» ضمن رواتب الموظفين.</small>
+        </p>
       )}
 
       {open !== null && (

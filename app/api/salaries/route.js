@@ -3,6 +3,7 @@ import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
 import { errorResponse, readBody } from "../../../lib/users";
 import { checkSalary, formatSalary, formatStaff, isMonth, netSalary, payChange, salaryPaid } from "../../../lib/staff";
+import { formatExpense } from "../../../lib/finance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +11,8 @@ export const dynamic = "force-dynamic";
 // الرواتب of one month.
 //   GET ?month=2026-09 → { staff, salaries }: the active staff, plus anyone
 //   inactive who is due a salary that month. Each salary carries paid and
-//   remaining (دفعات الرواتب, voided ones excluded).
+//   remaining (دفعات الرواتب, voided ones excluded). lumps: salaries the
+//   accounts ledger holds only as a monthly total («رواتب (مجموع)»).
 
 export async function GET(request) {
   try {
@@ -21,13 +23,18 @@ export async function GET(request) {
     if (!isMonth(month)) return errorResponse("الشهر غير صالح.", 400);
 
     const salaries = await prisma.salary.findMany({ where: { month }, include: { SalaryPayment: true } });
+    const from = new Date(`${month}-01T00:00:00.000Z`);
+    const lumps = await prisma.expense.findMany({
+      where: { category: "SALARY", date: { gte: from, lt: new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 1)) } },
+      orderBy: { date: "asc" }
+    });
     const staff = await prisma.staff.findMany({
       where: { OR: [{ isActive: true }, { id: { in: salaries.map((s) => s.staffId) } }] },
       orderBy: { id: "asc" }
     });
 
     return Response.json(
-      { staff: staff.map(formatStaff), salaries: salaries.map(formatSalary) },
+      { staff: staff.map(formatStaff), salaries: salaries.map(formatSalary), lumps: lumps.map(formatExpense) },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {

@@ -16,7 +16,16 @@ export const dynamic = "force-dynamic";
 
 const dayMonth = (date) => new Date(date).toISOString().slice(0, 7);
 
-const TABS = { summary: "الملخص", salaries: "الرواتب", expenses: "المصاريف والحركات" };
+// Each tab holds only its own ledger: the two expense tabs, and the box
+// tab with الصندوق, حصص الشركاء and the money moving in and out of them.
+const TABS = {
+  summary: "الملخص",
+  salaries: "رواتب الموظفين",
+  general: "مصاريف عامة",
+  fixed: "مصاريف ثابتة",
+  box: "الصندوق والشركاء"
+};
+const BOARD = { general: "GENERAL", fixed: "ASSET" };
 
 function Tabs({ tab }) {
   return (
@@ -84,16 +93,17 @@ function Row({ label, totals, strong, remaining = totals.fee - totals.paid }) {
 export default async function FinancePage({ searchParams }) {
   const user = await requirePageUser(["ADMIN"]);
   const params = await searchParams;
-  const tab = params.tab in TABS ? params.tab : "summary";
+  // ?tab=expenses was the one ledger tab before it was split.
+  const tab = params.tab === "expenses" ? "general" : params.tab in TABS ? params.tab : "summary";
 
-  if (tab !== "summary") {
+  if (tab === "salaries" || tab in BOARD) {
     return (
       <>
         <AppHeader user={user} active="/dashboard/finance" />
         <main style={{ maxWidth: "1440px", margin: "24px auto", padding: "0 20px" }}>
           <h1 style={{ color: "#1e40af", marginBottom: "12px" }}>الملف المالي والأرصدة</h1>
           <Tabs tab={tab} />
-          {tab === "salaries" ? <SalariesBoard /> : <ExpensesBoard />}
+          {tab === "salaries" ? <SalariesBoard /> : <ExpensesBoard key={tab} kind={BOARD[tab]} />}
         </main>
       </>
     );
@@ -138,9 +148,9 @@ export default async function FinancePage({ searchParams }) {
     ...(showUnknown ? [["unknown", "وارد (غير محدد)"]] : []),
     ["otherIncome", "وارد آخر"],
     ["refunds", "استرجاع"],
-    ["salaries", "الرواتب"],
-    ["expenses", "المصاريف"],
-    ["assets", "الأصول"],
+    ["salaries", "رواتب الموظفين"],
+    ["expenses", "مصاريف عامة"],
+    ["assets", "مصاريف ثابتة"],
     ["net", "الصافي"],
     ["handovers", "تسليم الإدارة"],
     ["withdrawals", "سحب الشركاء"]
@@ -153,6 +163,10 @@ export default async function FinancePage({ searchParams }) {
   // partner is due their share of the net and has drawn so much.
   const net = monthTotal("net");
   const handovers = monthTotal("handovers");
+  // Of which hand-entered before تسليم الإدارة came from the receipts.
+  const manualHandovers = allExpenses
+    .filter((e) => e.category === "HANDOVER" && (!range || (dayMonth(e.date) >= range.from && dayMonth(e.date) <= range.to)))
+    .reduce((t, e) => t + Number(e.amount), 0);
   const withdrawals = monthTotal("withdrawals");
   const draws = allExpenses.filter(
     (e) => e.category === "WITHDRAWAL" &&
@@ -246,7 +260,7 @@ export default async function FinancePage({ searchParams }) {
           {years.map((y) => (
             <Link
               key={y.id}
-              href={y.isActive ? "/dashboard/finance" : `/dashboard/finance?year=${y.id}`}
+              href={`/dashboard/finance?${new URLSearchParams({ ...(tab === "box" && { tab }), ...(!y.isActive && { year: y.id }) })}`}
               aria-current={y.id === year?.id ? "page" : undefined}
               dir="ltr"
               style={{
@@ -266,6 +280,7 @@ export default async function FinancePage({ searchParams }) {
 
         <Tabs tab={tab} />
 
+        {tab === "summary" && (<>
         {isActiveYear && (
         <Link
           href="/dashboard/finance/overdue"
@@ -328,7 +343,7 @@ export default async function FinancePage({ searchParams }) {
         <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الملخص الشهري</h2>
         <p style={{ color: "#64748b", marginTop: 0, fontSize: "13px" }}>
           {range && <>من <span dir="ltr">{range.from}</span> إلى <span dir="ltr">{range.to}</span>. </>}
-          الوارد حسب تاريخ الوصل (أقساط ومنهج، بدون الملغاة)؛ الرواتب حسب تاريخ دفعها (بدون الملغاة؛ المنقولة بلا تاريخ حسب شهرها)؛ الصافي = الوارد + وارد آخر − الاسترجاع − الرواتب − المصاريف − الأصول.
+          الوارد حسب تاريخ الوصل (أقساط ومنهج، بدون الملغاة)؛ الرواتب حسب تاريخ دفعها (بدون الملغاة؛ المنقولة بلا تاريخ حسب شهرها)؛ الصافي = الوارد + وارد آخر − الاسترجاع − رواتب الموظفين − مصاريف عامة − مصاريف ثابتة.
           تسليم الإدارة وسحب الشركاء لا يُطرحان من الصافي.
           {showUnknown && " «غير محدد»: دفعات سُجّلت قبل إضافة نوع الدفع."}
         </p>
@@ -365,6 +380,13 @@ export default async function FinancePage({ searchParams }) {
           </table>
         </div>
 
+        </>)}
+
+        {tab === "box" && (<>
+        <p style={{ color: "#64748b", marginTop: 0 }}>
+          {range && <>من <span dir="ltr">{range.from}</span> إلى <span dir="ltr">{range.to}</span>. </>}
+          الصافي من «الملخص»؛ حصة كل شريك من الصافي، والسحب ما سُجّل باسمه أدناه («سحب البراق»…).
+        </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
           <section>
             <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الصندوق</h2>
@@ -373,7 +395,8 @@ export default async function FinancePage({ searchParams }) {
                 <tbody>
                   {[
                     ["الصافي", net],
-                    ["سُلّم إلى الإدارة", -handovers],
+                    ["سُلّم إلى الإدارة: الواصل النقدي + المناهج والزي (من تشرين الأول 2026)", manualHandovers - handovers],
+                    ...(manualHandovers ? [["سُلّم إلى الإدارة: المسجل يدوياً سابقاً", -manualHandovers]] : []),
                     ["صندوق المركز (الصافي − التسليم)", net - handovers, true],
                     ["صندوق الإدارة (التسليم − سحب الشركاء)", handovers - withdrawals, true]
                   ].map(([label, value, strong]) => (
@@ -422,6 +445,10 @@ export default async function FinancePage({ searchParams }) {
             </div>
           </section>
         </div>
+
+        <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "8px" }}>الحركات: مبيعات المركز، تسليم الإدارة، سحب الشركاء</h2>
+        <ExpensesBoard kind="BOX" />
+        </>)}
       </main>
     </>
   );

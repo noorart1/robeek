@@ -251,6 +251,27 @@ test("monthly summary: income by method, refunds and spending by month", async (
     [107, 50, 30, 20, 60, 10, 167, 97]
   );
   assert.deepEqual([aug.assets, aug.net], [5, -5]);
+  // تسليم الإدارة comes from the receipts only from October 2026 on:
+  // before that, only what was entered by hand.
+  assert.equal(sep.handovers, 0);
+  const [nov] = monthlySummary({
+    payments: [
+      { amount: 100, paymentType: "TUITION", paymentMethod: "CASH", paymentDate: "2026-11-10T08:00:00Z" },
+      { amount: 50, paymentType: "CURRICULUM", paymentMethod: "CARD", paymentDate: "2026-11-11T08:00:00Z" },
+      { amount: 30, paymentType: "TUITION", paymentMethod: null, paymentDate: "2026-11-12T08:00:00Z" },
+      { amount: 40, paymentType: "TUITION", paymentMethod: "CARD", paymentDate: "2026-11-12T08:00:00Z" },
+      { amount: 20, paymentType: "REFUND", paymentMethod: "CASH", paymentDate: "2026-11-13T08:00:00Z" }
+    ],
+    salaries: [],
+    expenses: [{ date: "2026-11-20", category: "HANDOVER", amount: 5 }]
+  });
+  // cash and method-less tuition 100 + 30, curriculum 50 (any method), less
+  // the cash refund 20, and the old hand-entered row 5; card tuition is not.
+  assert.equal(nov.handovers, 165);
+  const { handedOver } = await import("../lib/finance.js");
+  assert.equal(handedOver({ amount: 90, paymentType: "TUITION", paymentMethod: "CARD" }), 0);
+  assert.equal(handedOver({ amount: 90, paymentType: "REFUND", paymentMethod: "CARD" }), 0);
+  assert.equal(handedOver({ amount: 15, paymentType: "CURRICULUM_REFUND", paymentMethod: "CASH" }), -15);
 
   // Other income adds; handovers and partners' withdrawals don't touch net.
   const [oct] = monthlySummary({
@@ -274,6 +295,10 @@ test("monthly summary: income by method, refunds and spending by month", async (
   assert.equal(checkExpense(lump).field, "category");
   assert.equal(checkExpense(lump, "GENERAL").field, "category");
   assert.equal(checkExpense(lump, "SALARY").data.category, "SALARY");
+  // تسليم الإدارة is worked out from the receipts: no new hand-entered ones.
+  const handover = { date: "2026-09-06", item: "تسليم الإدارة", amount: "1000", category: "HANDOVER" };
+  assert.equal(checkExpense(handover).field, "category");
+  assert.equal(checkExpense(handover, "HANDOVER").data.category, "HANDOVER");
 });
 
 test("school years: the next one, and the months each covers", async () => {
