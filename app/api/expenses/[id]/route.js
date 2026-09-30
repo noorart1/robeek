@@ -25,7 +25,10 @@ export async function PATCH(request, { params }) {
     const body = await readBody(request);
     if (!body) return errorResponse("البيانات المرسلة غير صالحة.", 400);
 
-    const checked = checkExpense(body);
+    const current = await prisma.expense.findUnique({ where: { id }, select: { category: true } });
+    if (!current) return errorResponse("المصروف غير موجود.", 404);
+
+    const checked = checkExpense(body, current.category);
     if (checked.error) return errorResponse(checked.error, 400, { field: checked.field });
 
     const expense = await prisma.expense.update({ where: { id }, data: { ...checked.data, updatedAt: new Date() } });

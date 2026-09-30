@@ -1,10 +1,11 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 import { formatDate } from "../lib/arabic";
-import { SHIFTS, formatMoney } from "../lib/labels";
+import { iraqToday } from "../lib/dates";
+import { PAYMENT_METHODS, SALARY_PAYMENT_TYPES, SHIFTS, formatMoney } from "../lib/labels";
 import { CONTRACT_SUGGESTIONS, JOB_SUGGESTIONS } from "../lib/staff";
 
 export async function send(url, method, body) {
@@ -54,6 +55,9 @@ export default function StaffManager() {
 
   useEffect(() => {
     load();
+    // Salaries recorded under المالية → الرواتب change the pay shown here.
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
   }, []);
 
   const saved = () => { setEditing(null); load(); };
@@ -95,17 +99,18 @@ export default function StaffManager() {
             </tr>
           </thead>
           <tbody>
-            {staff.map((person, index) =>
-              editing === person.id ? (
-                <tr key={person.id}>
-                  <td colSpan={11} style={{ ...cell, whiteSpace: "normal", backgroundColor: "#f8fafc" }}>
-                    <StaffForm person={person} jobs={jobs} onCancel={() => setEditing(null)} onSaved={saved} />
-                  </td>
-                </tr>
-              ) : (
+            {staff.map((person, index) => (
                 <tr key={person.id} style={{ opacity: person.isActive ? 1 : 0.55 }}>
                   <td style={cell}>{index + 1}</td>
-                  <td style={{ ...cell, fontWeight: 600 }} title={person.notes || undefined}>{person.name}</td>
+                  <td style={cell} title={person.notes || undefined}>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(person.id)}
+                      style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 600, color: "#1e40af", cursor: "pointer" }}
+                    >
+                      {person.name}
+                    </button>
+                  </td>
                   <td style={cell}>{person.job || "—"}</td>
                   <td style={cell}>{SHIFTS[person.shift] || "—"}</td>
                   <td style={cell} dir="ltr">{person.phone || "—"}</td>
@@ -118,8 +123,7 @@ export default function StaffManager() {
                     <button type="button" onClick={() => setEditing(person.id)}>✎ تعديل</button>
                   </td>
                 </tr>
-              )
-            )}
+            ))}
             {staff.length === 0 && (
               <tr><td colSpan={11} style={{ ...cell, color: "#64748b" }}>لا يوجد موظفون بعد.</td></tr>
             )}
@@ -134,6 +138,337 @@ export default function StaffManager() {
           </tfoot>
         </table>
       </div>
+
+      {typeof editing === "number" && (
+        <StaffDialog key={editing} id={editing} jobs={jobs} onClose={() => setEditing(null)} onChanged={load} />
+      )}
+    </>
+  );
+}
+
+// Like the children's dialog: the person's details, editable, their
+// salaries (الرواتب, as الدفعات for a child) and سجل تغيير الراتب.
+// onChanged: something was saved, so the page behind should reload.
+export function StaffDialog({ id, jobs, onClose, onChanged }) {
+  const dialogRef = useRef(null);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      setData(await send(`/api/staff/${id}`, "GET"));
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  useEffect(() => {
+    dialogRef.current?.showModal();
+    refresh();
+  }, [id]);
+
+  const changed = () => { refresh(); onChanged(); };
+
+  return (
+    <dialog
+      ref={dialogRef}
+      dir="rtl"
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      style={{ width: "min(960px, 96vw)", maxHeight: "94vh", padding: 0, border: "none", borderRadius: "14px", boxShadow: "0 20px 60px rgba(15, 23, 42, 0.3)" }}
+    >
+      <div style={{ padding: "18px 20px", backgroundColor: "#f8fafc" }}>
+        {error && <p role="alert" style={{ color: "#dc2626" }}>{error}</p>}
+        {!data && !error && <p>جارٍ التحميل...</p>}
+
+        {data && (
+          <>
+            <StaffForm
+              key={data.staff.updatedAt}
+              person={data.staff}
+              jobs={jobs}
+              onCancel={onClose}
+              onSaved={changed}
+              onDeleted={() => { onChanged(); onClose(); }}
+            />
+            <Salaries person={data.staff} salaries={data.salaries} payments={data.payments} onChanged={changed} />
+            <PayChanges changes={data.changes} />
+          </>
+        )}
+
+        <button type="button" onClick={onClose} style={{ marginTop: "14px", padding: "9px 20px", borderRadius: "8px" }}>
+          إغلاق
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+const box = { backgroundColor: "#ffffff", borderRadius: "12px", overflowX: "auto" };
+const h3 = { color: "#1e40af", margin: "4px 0 8px", fontSize: "16px" };
+
+// الرواتب: like a child's الدفعات — totals, every receipt (voided ones
+// struck through), printing, and a form that records a payment at once.
+// A month is due الراتب الاسمي + المكافآت unless set otherwise under
+// المالية → الرواتب; a payment never exceeds what is left of it.
+function Salaries({ person, salaries, payments, onChanged }) {
+  const thisMonth = iraqToday().slice(0, 7);
+  const dueOf = (month) => {
+    const salary = salaries.find((s) => s.month === month);
+    if (salary) return salary.remaining;
+    return person.baseSalary === null ? null : person.baseSalary + (person.bonus || 0);
+  };
+  // A refund starts empty: how much comes back is not guessable.
+  const blank = (month = thisMonth, paymentType = "SALARY") => ({
+    month,
+    paymentType,
+    amount: paymentType === "SALARY" ? dueOf(month) || "" : "",
+    paymentMethod: "CASH",
+    paidOn: iraqToday(),
+    description: ""
+  });
+  const [draft, setDraft] = useState(() => blank());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  // The payment just recorded, offered for printing.
+  const [last, setLast] = useState(null);
+
+  const set = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
+  const print = (url) => window.open(url, "_blank", "noopener");
+  const border = (field) => (error?.field === field ? { borderColor: "#dc2626" } : undefined);
+  const small = { ...control, padding: "7px" };
+
+  async function add(event) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { payment } = await send("/api/salaries/payments", "POST", { staffId: person.id, ...draft });
+      setLast(payment);
+      setDraft((d) => ({ ...d, amount: "", description: "" }));
+      onChanged();
+    } catch (err) {
+      setError({ message: err.message, field: err.field });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Receipts are voided, never deleted: the number stays on record.
+  async function voidPayment(payment) {
+    const label = payment.receiptNo ? `الوصل ${payment.receiptNo}` : "هذه الدفعة";
+    const reason = window.prompt(
+      `إلغاء ${label} بمبلغ ${formatMoney(payment.amount)} د.ع؟\nيبقى الوصل في السجل مع علامة «ملغى» ولا يُحسب.\n\nسبب الإلغاء (اختياري):`,
+      ""
+    );
+    if (reason === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await send(`/api/salaries/payments/${payment.id}`, "PATCH", { void: true, reason });
+      onChanged();
+    } catch (err) {
+      setError({ message: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const current = salaries.find((s) => s.month === thisMonth);
+  const left = current ? current.remaining : dueOf(thisMonth);
+  const summary = [
+    ["الراتب الاسمي", person.baseSalary],
+    ["مستحق هذا الشهر", current ? current.net : dueOf(thisMonth)],
+    ["المدفوع هذا الشهر", current?.paid ?? 0, "#15803d"],
+    ["الباقي هذا الشهر", left, left > 0 ? "#b91c1c" : undefined],
+    ["مجموع المدفوع", salaries.reduce((t, s) => t + s.paid, 0)]
+  ];
+  // Months still owed something, as for a child's earlier-year debt.
+  const owed = salaries.filter((s) => s.remaining > 0 && s.month !== thisMonth);
+
+  const pcell = { padding: "6px 8px", borderBottom: "1px solid #f1f5f9", textAlign: "right" };
+
+  return (
+    <>
+      <h3 style={h3}>الرواتب</h3>
+
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+        {summary.map(([label, value, color]) => (
+          <div key={label} style={{ padding: "8px 14px", backgroundColor: "#ffffff", borderRadius: "8px" }}>
+            <div style={{ fontSize: "12px", color: "#64748b" }}>{label}</div>
+            <strong style={{ color }}>{value === null || value === undefined ? "—" : formatMoney(value)}</strong>
+          </div>
+        ))}
+      </div>
+
+      {owed.map((s) => (
+        <p key={s.id} style={{ margin: "0 0 6px", color: "#b91c1c", fontSize: "13px" }}>
+          باقي من راتب <span dir="ltr">{s.month}</span>: <strong>{formatMoney(s.remaining)}</strong> د.ع
+          (سجّل دفعته «عن» ذلك الشهر)
+        </p>
+      ))}
+
+      {last && (
+        <p role="status" style={{ margin: "0 0 10px", color: "#15803d" }}>
+          ✓ سُجّل {last.paymentType === "REFUND" ? "الاسترجاع" : "الدفعة"} — وصل رقم <strong dir="ltr">{last.receiptNo}</strong>{" "}
+          <a href={`/dashboard/receipts/salary/${last.id}`} target="_blank" rel="noopener noreferrer">
+            🖨 طباعة الوصل
+          </a>
+        </p>
+      )}
+
+      {payments.some((p) => !p.voidedAt) && (
+        <button type="button" onClick={() => print(`/dashboard/receipts/staff/${person.id}`)} style={{ marginBottom: "8px" }}>
+          طباعة كل الوصولات
+        </button>
+      )}
+
+      {payments.length > 0 && (
+        <div style={box}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+            <thead>
+              <tr style={{ color: "#64748b" }}>
+                <th style={pcell}>الوصل</th>
+                <th style={pcell}>التاريخ</th>
+                <th style={pcell}>عن شهر</th>
+                <th style={pcell}>النوع</th>
+                <th style={pcell}>نوع الدفع</th>
+                <th style={{ ...pcell, textAlign: "left" }}>المبلغ</th>
+                <th style={pcell}>ملاحظة</th>
+                <th style={pcell} />
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((p) => {
+                const voided = Boolean(p.voidedAt);
+                const struck = voided ? { textDecoration: "line-through", color: "#94a3b8" } : undefined;
+                return (
+                  <tr key={p.id}>
+                    <td style={{ ...pcell, ...struck }} dir="ltr">{p.receiptNo || "—"}</td>
+                    <td style={{ ...pcell, ...struck }}>{formatDate(p.paidOn) || "—"}</td>
+                    <td style={{ ...pcell, ...struck }} dir="ltr">{p.month}</td>
+                    <td style={{ ...pcell, ...struck }}>{SALARY_PAYMENT_TYPES[p.paymentType]}</td>
+                    <td style={{ ...pcell, ...struck }}>{PAYMENT_METHODS[p.paymentMethod] || "—"}</td>
+                    <td style={{ ...pcell, ...(p.paymentType === "REFUND" && { color: "#b91c1c" }), ...struck, textAlign: "left" }}>
+                      {p.paymentType === "REFUND" ? "−" : ""}{formatMoney(p.amount)}
+                    </td>
+                    <td style={pcell}>
+                      <span style={struck}>{p.description || ""}</span>
+                      {voided && <small style={{ color: "#b91c1c" }}> ملغى{p.voidReason ? `: ${p.voidReason}` : ""}</small>}
+                    </td>
+                    <td style={{ ...pcell, whiteSpace: "nowrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => print(`/dashboard/receipts/salary/${p.id}`)}
+                        title="طباعة الوصل"
+                        style={{ marginInlineEnd: "6px" }}
+                      >
+                        طباعة
+                      </button>
+                      {!voided && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => voidPayment(p)}
+                          title="إلغاء الوصل (يبقى في السجل)"
+                          style={{ color: "#b91c1c" }}
+                        >
+                          إلغاء
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <form onSubmit={add} style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginTop: "8px" }}>
+        <input
+          aria-label="مبلغ الدفعة"
+          placeholder="المبلغ"
+          inputMode="numeric"
+          dir="ltr"
+          required
+          value={draft.amount}
+          onChange={(e) => set("amount", e.target.value)}
+          style={{ ...small, ...border("amount"), width: "130px" }}
+        />
+        <select
+          aria-label="نوع الدفعة"
+          value={draft.paymentType}
+          onChange={(e) => setDraft(blank(draft.month, e.target.value))}
+          style={{ ...small, ...border("paymentType") }}
+        >
+          {Object.entries(SALARY_PAYMENT_TYPES).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+        </select>
+        <label style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+          عن شهر
+          <input
+            type="month"
+            required
+            value={draft.month}
+            onChange={(e) => e.target.value && setDraft(blank(e.target.value, draft.paymentType))}
+            style={{ ...small, ...border("month") }}
+          />
+        </label>
+        <select aria-label="نوع الدفع" value={draft.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value)} style={small}>
+          {Object.entries(PAYMENT_METHODS).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+        </select>
+        <input aria-label="تاريخ الدفع" type="date" value={draft.paidOn} onChange={(e) => set("paidOn", e.target.value)} style={{ ...small, ...border("paidOn") }} />
+        <input
+          aria-label="ملاحظة"
+          placeholder="ملاحظة (سلفة، نصف الراتب…)"
+          maxLength={500}
+          value={draft.description}
+          onChange={(e) => set("description", e.target.value)}
+          style={{ ...small, flex: "1 1 180px" }}
+        />
+        <button type="submit" disabled={busy}>{busy ? "جارٍ الحفظ..." : draft.paymentType === "REFUND" ? "+ تسجيل استرجاع" : "+ إضافة دفعة"}</button>
+      </form>
+
+      {error && <p role="alert" style={{ color: "#dc2626" }}>{error.message}</p>}
+    </>
+  );
+}
+
+// سجل تغيير الراتب: every change of الراتب الاسمي / المكافآت, newest first.
+function PayChanges({ changes }) {
+  const amount = (value) => (value === null ? "—" : formatMoney(value));
+  const pair = (from, to) => (from === to ? amount(to) : <>{amount(from)} → <strong>{amount(to)}</strong></>);
+
+  return (
+    <>
+      <h3 style={{ ...h3, marginTop: "18px" }}>سجل تغيير الراتب</h3>
+      {changes.length === 0 ? (
+        <p style={{ color: "#64748b", margin: 0 }}>لم يتغير الراتب منذ بدء التسجيل.</p>
+      ) : (
+        <div style={box}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+            <thead>
+              <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
+                <th style={cell}>التاريخ</th>
+                <th style={cell}>الراتب الاسمي</th>
+                <th style={cell}>المكافآت</th>
+                <th style={cell}>بواسطة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {changes.map((c) => (
+                <tr key={c.id}>
+                  <td style={cell}>{formatDate(iraqToday(new Date(c.createdAt)))}</td>
+                  <td style={cell} dir="ltr">{pair(c.oldBaseSalary, c.newBaseSalary)}</td>
+                  <td style={cell} dir="ltr">{pair(c.oldBonus, c.newBonus)}</td>
+                  <td style={cell}>{c.changedBy || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }
@@ -152,7 +487,7 @@ const FIELDS = [
   ["contract", "العقد", { list: "staff-contract", maxLength: 191, placeholder: "نعم / لا أو تفاصيل" }]
 ];
 
-function StaffForm({ person, jobs, onCancel, onSaved }) {
+function StaffForm({ person, jobs, onCancel, onSaved, onDeleted = onSaved }) {
   const isNew = !person;
   const [form, setForm] = useState(() => {
     const initial = { notes: person?.notes ?? "", isActive: person?.isActive ?? true };
@@ -187,7 +522,7 @@ function StaffForm({ person, jobs, onCancel, onSaved }) {
     setBusy(true);
     try {
       await send(`/api/staff/${person.id}`, "DELETE");
-      onSaved();
+      onDeleted();
     } catch (err) {
       setError({ message: err.message });
       setBusy(false);

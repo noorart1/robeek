@@ -11,6 +11,8 @@ model AcademicYear {
   id         Int          @id @default(autoincrement())
   name       String       @unique
   isActive   Boolean      @default(false)
+  // REGULAR (2025-2026) or SUMMER (صيف 2026); one of each may be active.
+  kind       String       @default("REGULAR") @db.VarChar(10)
   Class      Class[]
   Enrollment Enrollment[]
 }
@@ -205,6 +207,22 @@ model Staff {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime
   Salary     Salary[]
+  StaffPayChange StaffPayChange[]
+}
+
+// سجل تغيير الراتب: one row per change of Staff.baseSalary / bonus.
+model StaffPayChange {
+  id            Int      @id @default(autoincrement())
+  staffId       Int
+  oldBaseSalary Decimal? @db.Decimal(15, 2)
+  newBaseSalary Decimal? @db.Decimal(15, 2)
+  oldBonus      Decimal? @db.Decimal(15, 2)
+  newBonus      Decimal? @db.Decimal(15, 2)
+  changedBy     String?  @db.VarChar(191)
+  createdAt     DateTime @default(now())
+  Staff         Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
 }
 
 // One salary per staff member per calendar month ("2026-09").
@@ -215,14 +233,32 @@ model Salary {
   baseSalary    Decimal   @db.Decimal(15, 2)
   bonus         Decimal   @default(0) @db.Decimal(15, 2)
   deduction     Decimal   @default(0) @db.Decimal(15, 2)
-  paidOn        DateTime? @db.Date
-  paymentMethod String?   @db.VarChar(20)
   notes         String?   @db.VarChar(500)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime
   Staff         Staff     @relation(fields: [staffId], references: [id])
+  SalaryPayment SalaryPayment[]
 
   @@unique([staffId, month])
+}
+
+// دفعات الرواتب: what was paid against a Salary, like a child's Payment:
+// numbered (S-0001), voided, never deleted. Imported ones have no number.
+model SalaryPayment {
+  id            Int       @id @default(autoincrement())
+  salaryId      Int
+  amount        Decimal   @db.Decimal(15, 2)
+  paymentType   String    @default("SALARY") @db.VarChar(20) // SALARY | REFUND (استرجاع)
+  paidOn        DateTime? @db.Date
+  paymentMethod String?   @db.VarChar(20)
+  receiptNo     String?   @unique
+  description   String?   @db.VarChar(500)
+  createdAt     DateTime  @default(now())
+  voidedAt      DateTime?
+  voidReason    String?
+  Salary        Salary    @relation(fields: [salaryId], references: [id])
+
+  @@index([salaryId])
 }
 
 // المصاريف: GENERAL (المصاريف العامة) or ASSET (الأصول والتطوير).

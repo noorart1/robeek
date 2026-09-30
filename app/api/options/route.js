@@ -6,7 +6,8 @@ import { activeAcademicYear } from "../../../lib/student-data";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Choices for the section and transport-line pickers.
+// Choices for the section and transport-line pickers: the school year's
+// sections, and those of the active summer course (summerClasses).
 
 export async function GET() {
   try {
@@ -19,19 +20,24 @@ export async function GET() {
       );
     }
 
-    const year = await activeAcademicYear();
+    const [year, summer] = await Promise.all([activeAcademicYear(), activeAcademicYear(prisma, "SUMMER")]);
     const teacher = user.role === "TEACHER";
 
-    const [classes, lines] = await Promise.all([
+    const sections = (academicYearId) =>
       prisma.class.findMany({
         where: {
-          ...(year ? { academicYearId: year.id } : {}),
+          academicYearId,
           // A teacher only sees the sections assigned to her.
           ...(teacher ? { teacherUserId: user.id } : {})
         },
         select: { id: true, name: true, shift: true, teacherName: true, teacherUserId: true },
         orderBy: [{ shift: "desc" }, { name: "asc" }]
-      }),
+      });
+
+    const [classes, summerClasses, lines] = await Promise.all([
+      // No active year (a fresh database): every section, as before.
+      sections(year?.id),
+      summer ? sections(summer.id) : [],
       teacher ? [] : prisma.transportLine.findMany({
         select: { id: true, name: true, driverPhone: true, shift: true },
         orderBy: { id: "asc" }
@@ -39,7 +45,7 @@ export async function GET() {
     ]);
 
     return Response.json(
-      { academicYear: year?.name ?? null, classes, lines },
+      { academicYear: year?.name ?? null, classes, summerYear: summer?.name ?? null, summerClasses, lines },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {

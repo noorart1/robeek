@@ -16,12 +16,14 @@ function errorResponse(message, status, extra = {}) {
   );
 }
 
-// Receipt numbers per academic year: "2025-2026" → 2526-0001, 2526-0002…
-// From the Sequence table, incremented inside the payment's transaction,
-// so a number is never given twice — not even after its payment is gone.
+// Receipt numbers per academic year: "2025-2026" → 2526-0001, 2526-0002…,
+// a summer course "صيف 2026" → SU26-0001. From the Sequence table,
+// incremented inside the payment's transaction, so a number is never given
+// twice — not even after its payment is gone.
 async function nextReceiptNo(tx, yearName) {
   const match = /^\d{2}(\d{2})\s*-\s*\d{2}(\d{2})$/.exec(yearName || "");
-  const prefix = match ? `${match[1]}${match[2]}` : "R";
+  const summer = /^صيف \d{2}(\d{2})$/.exec(yearName || "");
+  const prefix = match ? `${match[1]}${match[2]}` : summer ? `SU${summer[1]}` : "R";
 
   const counter = await tx.sequence.upsert({
     where: { name: `receipt-${prefix}` },
@@ -80,8 +82,9 @@ export async function POST(request, { params }) {
         ? body.description.trim().slice(0, 500)
         : null;
 
-    // enrollmentId: paying off an earlier year («عن» that year). Otherwise
-    // the active academic year first, then the newest enrollment.
+    // enrollmentId: the enrollment paid for — the summer course's, or an
+    // earlier year's («عن» that year). The dialog always sends it. Without
+    // it: the active school year first, then the newest enrollment.
     const enrollmentId = body.enrollmentId ? Number(body.enrollmentId) : null;
 
     if (enrollmentId !== null && (!Number.isSafeInteger(enrollmentId) || enrollmentId <= 0)) {
@@ -90,7 +93,7 @@ export async function POST(request, { params }) {
 
     const enrollment = await prisma.enrollment.findFirst({
       where: { studentId, ...(enrollmentId && { id: enrollmentId }) },
-      orderBy: [{ AcademicYear: { isActive: "desc" } }, { id: "desc" }],
+      orderBy: [{ AcademicYear: { isActive: "desc" } }, { AcademicYear: { kind: "asc" } }, { id: "desc" }],
       include: { AcademicYear: { select: { name: true } } }
     });
 

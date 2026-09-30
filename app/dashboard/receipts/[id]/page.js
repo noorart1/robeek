@@ -23,7 +23,9 @@ export default async function ReceiptPage({ params }) {
 
   if (!payment) notFound();
 
-  const student = await loadStudent(payment.Enrollment.studentId);
+  const loaded = await loadStudent(payment.Enrollment.studentId);
+  // A summer course payment is shown against the summer enrollment.
+  const student = loaded.summer?.enrollment.id === payment.enrollmentId ? { ...loaded, ...loaded.summer } : loaded;
 
   return (
     <>

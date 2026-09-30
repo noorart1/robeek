@@ -6,7 +6,7 @@ import StudentsTable from "../../../components/StudentsTable";
 export const dynamic = "force-dynamic";
 
 // ?class=<id> and ?review=1 preset the table's filters (links from the
-// dashboard).
+// dashboard); ?term=summer shows الدورة الصيفية.
 export default async function StudentsPage({ searchParams }) {
   const user = await requirePageUser(["ADMIN"]);
 
@@ -18,6 +18,7 @@ export default async function StudentsPage({ searchParams }) {
       <StudentsTable
         initialClassId={typeof params.class === "string" ? params.class : ""}
         initialReview={params.review === "1"}
+        term={params.term === "summer" ? "summer" : ""}
       />
     </>
   );

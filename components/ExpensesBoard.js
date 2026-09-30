@@ -88,6 +88,7 @@ export default function ExpensesBoard() {
     setError(null);
   }
 
+  const editingCategory = expenses?.find((e) => e.id === editingId)?.category;
   const sum = (category) =>
     (expenses ?? []).filter((e) => !category || e.category === category).reduce((t, e) => t + e.amount, 0);
 
@@ -108,7 +109,10 @@ export default function ExpensesBoard() {
         <input type="date" aria-label="التاريخ" required value={form.date} onChange={(e) => set("date", e.target.value)} style={{ ...control, ...border("date") }} />
         <input aria-label="بند المصروف" placeholder="بند المصروف" list="expense-items" required maxLength={191} value={form.item} onChange={(e) => set("item", e.target.value)} style={{ ...control, ...border("item"), width: "150px" }} />
         <select aria-label="النوع" value={form.category} onChange={(e) => set("category", e.target.value)} style={control}>
-          {Object.entries(EXPENSE_CATEGORIES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          {/* رواتب (مجموع) only for the old lump sums: salaries are paid under الرواتب. */}
+          {Object.entries(EXPENSE_CATEGORIES)
+            .filter(([v]) => v !== "SALARY" || editingCategory === "SALARY")
+            .map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         <input aria-label="المبلغ" placeholder="المبلغ" dir="ltr" inputMode="numeric" required value={form.amount} onChange={(e) => set("amount", e.target.value)} style={{ ...control, ...border("amount"), width: "120px" }} />
         <select aria-label="نوع الدفع" value={form.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value)} style={control}>

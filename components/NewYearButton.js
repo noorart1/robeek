@@ -4,15 +4,22 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { send } from "./StaffManager";
+import { yearLabel } from "../lib/labels";
 
-// بدء سنة دراسية جديدة (POST /api/academic-years).
-export default function NewYearButton({ next, current }) {
+// بدء سنة دراسية جديدة (POST /api/academic-years), or with `summer` (its
+// name, «صيف 2026») بدء الدورة الصيفية.
+export default function NewYearButton({ next, current, summer }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
 
   async function start() {
-    const ok = window.confirm(
+    const ok = summer ? window.confirm(
+      `بدء ${yearLabel(summer)}؟\n\n` +
+      `• تُنسخ شعب ${current} بمرشداتها إلى الدورة الصيفية.\n` +
+      "• لا يُسجَّل أي طفل تلقائياً: سجّل كل طفل من نافذته أو أضف طفلاً جديداً من «الدورة الصيفية».\n" +
+      "• تبقى السنة الدراسية نشطة كما هي.\n• تُحفظ نسخة احتياطية أولاً."
+    ) : window.confirm(
       `بدء السنة الدراسية ${next}؟\n\n` +
       `• تُنسخ شعب ${current} بمرشداتها إلى ${next}.\n` +
       "• ينتقل كل طفل نشط إلى نفس الشعبة بنفس المبلغ ونوع الدفع، من 1 تشرين الأول (الصباحي) أو 1 تشرين الثاني (المسائي).\n" +
@@ -24,8 +31,13 @@ export default function NewYearButton({ next, current }) {
     setBusy(true);
     setMessage(null);
     try {
-      const data = await send("/api/academic-years", "POST");
-      setMessage({ ok: true, text: `✓ بدأت السنة ${data.name}: ${data.classes} شعبة، ${data.students} طفل.` });
+      const data = await send("/api/academic-years", "POST", summer ? { kind: "SUMMER" } : undefined);
+      setMessage({
+        ok: true,
+        text: summer
+          ? `✓ بدأت ${yearLabel(data.name)}: ${data.classes} شعبة.`
+          : `✓ بدأت السنة ${data.name}: ${data.classes} شعبة، ${data.students} طفل.`
+      });
       router.refresh();
     } catch (err) {
       setMessage({ ok: false, text: err.message });
@@ -37,7 +49,7 @@ export default function NewYearButton({ next, current }) {
   return (
     <span style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
       <button type="button" disabled={busy} onClick={start}>
-        {busy ? "جارٍ البدء..." : `+ بدء السنة الدراسية ${next}`}
+        {busy ? "جارٍ البدء..." : summer ? `+ بدء ${yearLabel(summer)}` : `+ بدء السنة الدراسية ${next}`}
       </button>
       {message && (
         <span role={message.ok ? "status" : "alert"} style={{ color: message.ok ? "#15803d" : "#dc2626" }}>

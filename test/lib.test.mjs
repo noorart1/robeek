@@ -41,6 +41,24 @@ test("monthly: a late starter pays over the months that remain", () => {
   assert.deepEqual(dates.map((d) => d.day), ["2026-03-10", "2026-04-01", "2026-05-01"]);
 });
 
+test("summer course: monthly to August, yearly is the whole fee at the start", async () => {
+  const summer = (fee, start, plan) => ({ tuitionFee: fee, paymentPlan: plan, enrollmentDate: start, yearName: "صيف 2026" });
+
+  const { dates } = dueSchedule(summer(400000, "2026-05-03", "MONTHLY"));
+  assert.deepEqual(dates.map((d) => d.day), ["2026-05-03", "2026-06-01", "2026-07-01", "2026-08-01"]);
+  assert.ok(dates.every((d) => d.amount === 100000));
+
+  assert.deepEqual(dueSchedule(summer(400000, "2026-06-15", "YEARLY")).dates, [{ day: "2026-06-15", amount: 400000 }]);
+  // 3 × 100,000 (June, July, August): two due by 10 July, one paid.
+  assert.equal(duesOn("2026-07-10", summer(300000, "2026-06-01", "MONTHLY"), 100000).overdue, 100000);
+
+  const { isSummerYear, yearLabel, summerYearName } = await import("../lib/labels.js");
+  assert.equal(summerYearName("2026"), "صيف 2026");
+  assert.ok(isSummerYear("صيف 2026") && !isSummerYear("2025-2026"));
+  assert.equal(yearLabel("صيف 2026"), "الدورة الصيفية 2026");
+  assert.equal(yearLabel("2025-2026"), "السنة الدراسية 2025-2026");
+});
+
 test("no plan recorded is treated as monthly and flagged as assumed", () => {
   const { plan, assumed } = dueSchedule(monthly(800000, "2025-10-01", null));
   assert.equal(plan, "MONTHLY");
@@ -158,11 +176,53 @@ test("salary: net = salary + bonus − deductions, never negative", async () => 
   assert.equal(checkSalary({ ...base, month: "2026-13" }).field, "month");
   assert.equal(checkSalary({ ...base, baseSalary: "" }).field, "baseSalary");
   assert.equal(checkSalary({ ...base, deduction: "800000" }).field, "deduction");
-  assert.equal(checkSalary({ ...base, paymentMethod: "CHEQUE" }).field, "paymentMethod");
 
-  const { data } = checkSalary({ ...base, bonus: "160000", deduction: "200000", paidOn: "2026-09-07" });
+  const { data } = checkSalary({ ...base, bonus: "160000", deduction: "200000" });
   assert.deepEqual([data.baseSalary, data.bonus, data.deduction], [700000, 160000, 200000]);
+});
+
+test("salary payment: positive amount, valid month/date/method; voided never count", async () => {
+  const { checkSalaryPayment, formatSalary } = await import("../lib/staff.js");
+  const base = { staffId: 1, month: "2026-09", amount: "250000" };
+
+  assert.equal(checkSalaryPayment({ ...base, amount: "0" }).field, "amount");
+  assert.equal(checkSalaryPayment({ ...base, amount: "abc" }).field, "amount");
+  assert.equal(checkSalaryPayment({ ...base, month: "2026-9" }).field, "month");
+  assert.equal(checkSalaryPayment({ ...base, paidOn: "2026-02-30" }).field, "paidOn");
+  assert.equal(checkSalaryPayment({ ...base, paymentMethod: "CHEQUE" }).field, "paymentMethod");
+
+  const { data } = checkSalaryPayment({ ...base, amount: "٢٥٠٬٠٠٠", paidOn: "2026-09-07", paymentMethod: "CARD" });
+  assert.equal(data.amount, 250000);
   assert.equal(data.paidOn.toISOString().slice(0, 10), "2026-09-07");
+
+  const salary = formatSalary({
+    baseSalary: "700000.00", bonus: "100000.00", deduction: "50000.00",
+    SalaryPayment: [{ amount: "300000.00" }, { amount: "200000.00", voidedAt: new Date() }, { amount: "100000.00" }]
+  });
+  assert.deepEqual([salary.net, salary.paid, salary.remaining], [750000, 400000, 350000]);
+  assert.equal(salary.SalaryPayment, undefined);
+
+  // استرجاع: stored positive, taken off what was paid.
+  assert.equal(checkSalaryPayment({ ...base, paymentType: "BONUS" }).field, "paymentType");
+  assert.equal(checkSalaryPayment(base).data.paymentType, "SALARY");
+  const refunded = formatSalary({
+    baseSalary: "700000.00", bonus: "0.00", deduction: "0.00",
+    SalaryPayment: [{ amount: "700000.00" }, { amount: "50000.00", paymentType: "REFUND" }]
+  });
+  assert.deepEqual([refunded.paid, refunded.remaining], [650000, 50000]);
+});
+
+test("pay change: logged only when salary or bonus really changes", async () => {
+  const { payChange } = await import("../lib/staff.js");
+  const user = { fullName: "المدير" };
+
+  // Prisma Decimals (strings here) against parsed numbers: equal is no change.
+  assert.equal(payChange(1, { baseSalary: "1000.00", bonus: null }, { baseSalary: 1000, bonus: null }, user), null);
+  assert.deepEqual(payChange(1, { baseSalary: "1000.00", bonus: null }, { baseSalary: 2000, bonus: null }, user), {
+    staffId: 1, oldBaseSalary: 1000, newBaseSalary: 2000, oldBonus: null, newBonus: null, changedBy: "المدير"
+  });
+  assert.equal(payChange(1, {}, { baseSalary: null, bonus: null }, user), null);
+  assert.equal(payChange(1, { baseSalary: 1000, bonus: 0 }, { baseSalary: 1000, bonus: 50 }, user).newBonus, 50);
 });
 
 test("monthly summary: income by method, refunds and spending by month", async () => {
@@ -209,6 +269,11 @@ test("monthly summary: income by method, refunds and spending by month", async (
   assert.equal(checkExpense({ date: "2026-09-01", item: "نثريات", amount: "0" }).field, "amount");
   assert.equal(checkExpense({ date: "2026-09-01", item: "نثريات", amount: "5", category: "X" }).field, "category");
   assert.equal(checkExpense({ date: "٢٠٢٦-٠٩-٠١", item: "نثريات", amount: "٢١٨٬٠٠٠" }).data.amount, 218000);
+  // رواتب (مجموع): no new ones (salaries would count twice); old ones stay editable.
+  const lump = { date: "2026-09-06", item: "رواتب", amount: "6035000", category: "SALARY" };
+  assert.equal(checkExpense(lump).field, "category");
+  assert.equal(checkExpense(lump, "GENERAL").field, "category");
+  assert.equal(checkExpense(lump, "SALARY").data.category, "SALARY");
 });
 
 test("school years: the next one, and the months each covers", async () => {

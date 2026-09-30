@@ -14,7 +14,8 @@ import {
   classLabel,
   formatMoney,
   fullName,
-  parentName
+  parentName,
+  yearLabel
 } from "../lib/labels";
 
 // kind: "edit" = inline EditableCell, "parent" = ParentLinkCell,
@@ -96,9 +97,14 @@ const blankStudent = {
 
 const NEW = "new";
 
-export default function StudentsTable({ initialClassId = "", initialReview = false }) {
+// term "summer": الدورة الصيفية — the children enrolled in the active
+// summer course, with its section, fee and payments in place of the
+// school year's (formatStudent's `summer`). Otherwise the school year,
+// without the children who only come for the summer.
+export default function StudentsTable({ initialClassId = "", initialReview = false, term = "" }) {
+  const summerView = term === "summer";
   const [students, setStudents] = useState([]);
-  const [options, setOptions] = useState({ classes: [], lines: [] });
+  const [allOptions, setOptions] = useState({ classes: [], summerClasses: [], lines: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -263,9 +269,16 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
     setLastSync(new Date());
   }
 
+  const options = summerView
+    ? { ...allOptions, classes: allOptions.summerClasses ?? [], academicYear: allOptions.summerYear }
+    : allOptions;
+  const shown = summerView
+    ? students.filter((s) => s.summer).map((s) => ({ ...s, ...s.summer }))
+    : students.filter((s) => s.enrollment || !s.summer);
+
   const shownClasses = options.classes.filter((cls) => !shift || cls.shift === shift);
 
-  const filteredStudents = students
+  const filteredStudents = shown
     .filter((student) => {
       const cls = student.enrollment?.class;
 
@@ -300,12 +313,12 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
     ])
   );
 
-  const reviewCount = students.filter((s) => s.reviewNote).length;
+  const reviewCount = shown.filter((s) => s.reviewNote).length;
 
   const dialogStudent =
     dialogId === NEW
       ? blankStudent
-      : dialogId && students.find((student) => student.id === dialogId);
+      : dialogId && shown.find((student) => student.id === dialogId);
 
   const cellStyle = {
     borderBottom: "1px solid #e2e8f0",
@@ -434,10 +447,31 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
         إدارة بيانات الأطفال
         {options.academicYear && (
           <span style={{ fontSize: "15px", color: "#64748b", fontWeight: "normal" }}>
-            {" "}— السنة الدراسية <span dir="ltr">{options.academicYear}</span>
+            {" "}— {yearLabel(options.academicYear)}
           </span>
         )}
       </h1>
+
+      {allOptions.summerYear && (
+        <nav style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
+          {[["", yearLabel(allOptions.academicYear)], ["summer", yearLabel(allOptions.summerYear)]].map(([value, label]) => (
+            <a
+              key={value}
+              href={value ? "/dashboard/students?term=summer" : "/dashboard/students"}
+              aria-current={term === value ? "page" : undefined}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "6px",
+                textDecoration: "none",
+                color: term === value ? "#ffffff" : "#1e40af",
+                backgroundColor: term === value ? (value ? "#ea580c" : "#2563eb") : "#eff6ff"
+              }}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      )}
 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "10px" }}>
         <button

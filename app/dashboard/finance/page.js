@@ -1,12 +1,12 @@
 
 import prisma from "../../../lib/prisma";
 import { requirePageUser } from "../../../lib/auth";
-import { SHIFTS, classLabel, formatMoney } from "../../../lib/labels";
-import { formatStudent, studentSelect } from "../../../lib/student-data";
+import { SHIFTS, classLabel, formatMoney, summerYearName, yearLabel } from "../../../lib/labels";
+import { formatStudent, overdueViews, studentSelect } from "../../../lib/student-data";
 import { PARTNERS, monthlySummary, paidTotals, yearMonths } from "../../../lib/finance";
 import { matchesSearch } from "../../../lib/arabic";
+import { salaryAmount } from "../../../lib/staff";
 import { iraqToday } from "../../../lib/dates";
-import { netSalary } from "../../../lib/staff";
 import Link from "next/link";
 import AppHeader from "../../../components/AppHeader";
 import SalariesBoard from "../../../components/SalariesBoard";
@@ -90,7 +90,7 @@ export default async function FinancePage({ searchParams }) {
     return (
       <>
         <AppHeader user={user} active="/dashboard/finance" />
-        <main style={{ maxWidth: "1200px", margin: "24px auto", padding: "0 20px" }}>
+        <main style={{ maxWidth: "1440px", margin: "24px auto", padding: "0 20px" }}>
           <h1 style={{ color: "#1e40af", marginBottom: "12px" }}>الملف المالي والأرصدة</h1>
           <Tabs tab={tab} />
           {tab === "salaries" ? <SalariesBoard /> : <ExpensesBoard />}
@@ -100,7 +100,8 @@ export default async function FinancePage({ searchParams }) {
   }
 
   // ?year=<id> shows an earlier school year; the active one by default.
-  const years = await prisma.academicYear.findMany({ orderBy: { name: "desc" } });
+  // School years only: a summer course belongs to the year it ends.
+  const years = await prisma.academicYear.findMany({ where: { kind: "REGULAR" }, orderBy: { name: "desc" } });
   const active = years.find((y) => y.isActive) ?? null;
   const year = years.find((y) => String(y.id) === params.year) ?? active;
   const isActiveYear = year?.id === active?.id;
@@ -116,12 +117,18 @@ export default async function FinancePage({ searchParams }) {
       where: { voidedAt: null },
       select: { amount: true, paymentType: true, paymentMethod: true, paymentDate: true }
     }),
-    prisma.salary.findMany({ select: { month: true, baseSalary: true, bonus: true, deduction: true } }),
+    // Salaries as paid (voided receipts never count), in the month they were
+    // paid, so الصندوق follows the cash. Imported payments have no date:
+    // they stay under the salary's own month.
+    prisma.salaryPayment.findMany({
+      where: { voidedAt: null },
+      select: { amount: true, paymentType: true, paidOn: true, Salary: { select: { month: true } } }
+    }),
     prisma.expense.findMany({ select: { date: true, category: true, amount: true, item: true } })
   ]);
   const months = monthlySummary({
     payments: allPayments,
-    salaries: allSalaries.map((s) => ({ month: s.month, net: netSalary(s) })),
+    salaries: allSalaries.map((p) => ({ month: p.paidOn ? dayMonth(p.paidOn) : p.Salary.month, net: salaryAmount(p) })),
     expenses: allExpenses
   }).filter((m) => !range || (m.month >= range.from && m.month <= range.to));
   const showUnknown = months.some((m) => m.unknown);
@@ -157,25 +164,28 @@ export default async function FinancePage({ searchParams }) {
   });
   const unassigned = withdrawals - partners.reduce((t, p) => t + p.taken, 0);
 
-  const enrollments = year
-    ? await prisma.enrollment.findMany({
-        where: { academicYearId: year.id },
-        select: {
-          tuitionFee: true,
-          Class: { select: { id: true, name: true, shift: true } },
-          Student: { select: { status: true } },
-          // Voided receipts never count.
-          Payment: { where: { voidedAt: null }, select: { amount: true, paymentType: true } }
-        }
-      })
-    : [];
+  const enrollmentSelect = {
+    tuitionFee: true,
+    Class: { select: { id: true, name: true, shift: true } },
+    Student: { select: { status: true } },
+    // Voided receipts never count.
+    Payment: { where: { voidedAt: null }, select: { amount: true, paymentType: true } }
+  };
+  // The summer course that closes this year: «صيف 2026» for 2025-2026.
+  const summerName = year && /^\d{4}-(\d{4})$/.test(year.name) ? summerYearName(year.name.slice(5)) : null;
+  const [enrollments, summerEnrollments] = await Promise.all([
+    year ? prisma.enrollment.findMany({ where: { academicYearId: year.id }, select: enrollmentSelect }) : [],
+    summerName ? prisma.enrollment.findMany({ where: { AcademicYear: { name: summerName } }, select: enrollmentSelect }) : []
+  ]);
+  const summerTotals = emptyTotals();
+  for (const enrollment of summerEnrollments) add(summerTotals, enrollment);
 
   // Overdue is about today, so only for the active year.
   const overdue = (
     isActiveYear ? await prisma.student.findMany({ where: { status: "ACTIVE" }, select: studentSelect }) : []
   )
     .map(formatStudent)
-    .filter((s) => s.financial.overdue > 0);
+    .flatMap(overdueViews);
   const overdueTotal = overdue.reduce((sum, s) => sum + s.financial.overdue, 0);
 
   const byShift = {};
@@ -273,7 +283,7 @@ export default async function FinancePage({ searchParams }) {
         >
           <strong>المتأخرون عن الدفع:</strong>
           {overdue.length
-            ? `${overdue.length} أطفال — ${formatMoney(overdueTotal)} د.ع`
+            ? `${new Set(overdue.map((s) => s.id)).size} أطفال — ${formatMoney(overdueTotal)} د.ع`
             : "لا يوجد"}
           <span style={{ marginInlineStart: "auto" }}>عرض القائمة وتذكير الأهل ←</span>
         </Link>
@@ -297,6 +307,7 @@ export default async function FinancePage({ searchParams }) {
                 remaining={grand.fee - grand.paid - (inactive.fee - inactive.paid)}
                 strong
               />
+              {summerTotals.students > 0 && <Row label={yearLabel(summerName)} totals={summerTotals} />}
             </tbody>
           </table>
         </div>
@@ -317,7 +328,7 @@ export default async function FinancePage({ searchParams }) {
         <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الملخص الشهري</h2>
         <p style={{ color: "#64748b", marginTop: 0, fontSize: "13px" }}>
           {range && <>من <span dir="ltr">{range.from}</span> إلى <span dir="ltr">{range.to}</span>. </>}
-          الوارد حسب تاريخ الوصل (أقساط ومنهج، بدون الملغاة)؛ الرواتب حسب شهرها؛ الصافي = الوارد + وارد آخر − الاسترجاع − الرواتب − المصاريف − الأصول.
+          الوارد حسب تاريخ الوصل (أقساط ومنهج، بدون الملغاة)؛ الرواتب حسب تاريخ دفعها (بدون الملغاة؛ المنقولة بلا تاريخ حسب شهرها)؛ الصافي = الوارد + وارد آخر − الاسترجاع − الرواتب − المصاريف − الأصول.
           تسليم الإدارة وسحب الشركاء لا يُطرحان من الصافي.
           {showUnknown && " «غير محدد»: دفعات سُجّلت قبل إضافة نوع الدفع."}
         </p>

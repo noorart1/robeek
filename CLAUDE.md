@@ -88,7 +88,18 @@ a plain VPS. Things that trip people up (all learned on the 2026-09-25 deploy):
 5. Runtime errors go to `stderr.log` in the app root. The server clock is
    Iraq time (+03), so cron times are Iraq times.
 6. Chain remote steps with `set -eo pipefail` — a `git pull | tail` once
-   hid a failed pull and the build carried on with the old code.
+   hid a failed pull and the build carried on with the old code. `set -e`
+   does not stop at a failed `cmd && echo done` either: write one command
+   per line.
+7. **`cloudlinux-selector restart` leaves the old `lsnode` process
+   running** beside the new one (2026-09-28: five had piled up, some two
+   days old, ~60 threads each). CloudLinux counts threads against the
+   account's process limit, so `next build` then failed with
+   `spawn … node EAGAIN`. After every restart, `ps -u $USER -o
+   pid,etime,args | grep lsnode` and kill all but the newest.
+8. There is no `~/.my.cnf`: `mysql` needs the credentials from `.env`.
+   Pass them in a temporary 0600 `--defaults-extra-file`, never with `-p`
+   on the command line (other users on the host can see it in `ps`).
 
 The same cPanel account also serves a WordPress site and a Laravel app (their
 cron jobs share the crontab). Only touch this app's own directory, and never
@@ -298,6 +309,14 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
   `MAX(receiptNo)`, so a number is never reused. Imported payments have no
   number. Receipts print from `/dashboard/receipts/[id]` (amount in words:
   `lib/tafqeet.js`).
+- **Salaries follow the same rules.** `Salary` is what a person is due for
+  a month; `SalaryPayment` rows are what was paid against it (several per
+  month allowed, never more than the rest), numbered `S-0001` from
+  `Sequence` `salary-receipt`, voided and never deleted. Receipts print
+  from `/dashboard/receipts/salary/[id]`, a person's statement from
+  `/dashboard/receipts/staff/[id]`. «الراتب الاسمي» in الكادر and the
+  newest month's salary are kept in step, and every change of it goes into
+  `StaffPayChange`.
 - **Overdue** (`lib/dues.js`) follows the school's rules: MONTHLY = the fee
   in equal parts from the start date to May (8 months morning, 7 evening),
   YEARLY = two halves 4½ months apart, no plan = assumed monthly. The
@@ -305,6 +324,16 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
   links (`wa.me/9647…`); nothing is sent automatically.
   Section, fee and attendance type are edited in the dialog, which saves them
   through `PUT /api/students/[id]/enrollment`.
+- **الدورة الصيفية** (May–August) is an `AcademicYear` of `kind` SUMMER
+  named «صيف 2026», active beside the REGULAR year (one active of each).
+  Started from the dashboard between 1 April and 31 August: it copies the
+  school year's sections, enrolls nobody. A child's summer enrollment is
+  `formatStudent(...).summer` (`{ enrollment, financial }`); the students
+  table's `?term=summer` view swaps it in, and the school-year view hides
+  summer-only children. Monthly instalments run to August, YEARLY is the
+  whole fee at the start (`lib/dues.js`); receipts are `SU26-0001`. The
+  finance page counts a summer under the school year it ends. Always use
+  `activeAcademicYear(client, kind)` — never `findFirst({ isActive })`.
 - **Attendance** (`/dashboard/attendance`, `components/AttendanceBoard.js`)
   stores one `Attendance` row per child per day: PRESENT / ABSENT / LATE /
   EXCUSED, or no row for "not recorded". Days are `YYYY-MM-DD` strings from

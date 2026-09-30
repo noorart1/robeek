@@ -13,7 +13,9 @@ import {
   PAYMENT_TYPES,
   classLabel,
   formatMoney,
-  fullName
+  fullName,
+  isSummerYear,
+  yearLabel
 } from "../lib/labels";
 import { REFUND_TYPES } from "../lib/finance";
 
@@ -654,7 +656,7 @@ export default function StudentDialog({
             </>
           )}
 
-          <h3 style={sectionTitle}>التسجيل والرسوم</h3>
+          <h3 style={sectionTitle}>{isSummerYear(options.academicYear) ? "التسجيل في الدورة الصيفية" : "التسجيل والرسوم"}</h3>
           <div style={grid}>
             {enrollmentFields.map((field) => (
               <label key={field.name} style={labelStyle(false)}>
@@ -672,6 +674,10 @@ export default function StudentDialog({
         {!isNew && (
         <>
         <Payments student={student} onSaved={onSaved} disabled={saving} />
+
+        {!isSummerYear(options.academicYear) && options.summerYear && (
+          <SummerEnrollment student={student} options={options} onSaved={onSaved} disabled={saving} />
+        )}
 
         <h3 style={sectionTitle}>الوالدان</h3>
         <div
@@ -788,7 +794,11 @@ function Payments({ student, onSaved, disabled }) {
     setError("");
 
     try {
-      const { response, data } = await send(`/api/students/${student.id}/payments`, "POST", draft);
+      // Always the enrollment shown (the summer course's in its view).
+      const { response, data } = await send(`/api/students/${student.id}/payments`, "POST", {
+        ...draft,
+        enrollmentId: draft.enrollmentId || enrollment.id
+      });
       if (!response.ok) throw new Error(data.error || "تعذر حفظ الدفعة.");
 
       onSaved(data.student);
@@ -883,7 +893,11 @@ function Payments({ student, onSaved, disabled }) {
           {enrollment.payments.some((p) => !p.voidedAt) && (
             <button
               type="button"
-              onClick={() => window.open(`/dashboard/receipts/student/${student.id}`, "_blank", "noopener")}
+              onClick={() => window.open(
+                `/dashboard/receipts/student/${student.id}${enrollment.academicYear.kind === "SUMMER" ? "?term=summer" : ""}`,
+                "_blank",
+                "noopener"
+              )}
               style={{ marginBottom: "8px" }}
             >
               طباعة كل الوصولات
@@ -1015,6 +1029,74 @@ function Payments({ student, onSaved, disabled }) {
       )}
 
       {error && <p role="alert" style={{ color: "#dc2626" }}>{error}</p>}
+    </>
+  );
+}
+
+// الدورة الصيفية, from the school year's view: register the child for
+// the active summer course (its own section, fee and plan), or show how
+// that registration stands. Its payments are made in the summer view.
+function SummerEnrollment({ student, options, onSaved, disabled }) {
+  const [draft, setDraft] = useState({ classId: "", tuitionFee: "", paymentPlan: "", enrollmentDate: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const summer = student.summer;
+  const control = { padding: "7px", border: "1px solid #cbd5e1", borderRadius: "6px", backgroundColor: "#fff" };
+  const set = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
+
+  async function enroll(event) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { response, data } = await send(`/api/students/${student.id}/enrollment`, "PUT", draft);
+      if (!response.ok) throw Object.assign(new Error(data.error || "تعذر التسجيل."), { field: data.field });
+      onSaved(data.student);
+    } catch (err) {
+      setError({ message: err.message, field: err.field });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const border = (field) => (error?.field === field ? { borderColor: "#dc2626" } : undefined);
+
+  return (
+    <>
+      <h3 style={{ margin: "18px 0 8px", color: "#ea580c", fontSize: "16px" }}>{yearLabel(options.summerYear)}</h3>
+      {summer ? (
+        <p style={{ margin: 0 }}>
+          مسجل في {classLabel(summer.enrollment.class)} — المبلغ {formatMoney(summer.financial.tuitionFee)}،
+          الواصل {formatMoney(summer.financial.totalPaid)}،{" "}
+          <span style={{ color: summer.financial.remaining > 0 ? "#b91c1c" : undefined }}>
+            الباقي {formatMoney(summer.financial.remaining)}
+          </span>{" "}
+          <a href="/dashboard/students?term=summer">الدفعات في «الدورة الصيفية» ←</a>
+        </p>
+      ) : options.summerClasses?.length ? (
+        <form onSubmit={enroll} style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          <select aria-label="شعبة الدورة الصيفية" required value={draft.classId} onChange={(e) => set("classId", e.target.value)} style={{ ...control, ...border("classId") }}>
+            <option value="">— الشعبة —</option>
+            {options.summerClasses.map((c) => (
+              <option key={c.id} value={c.id}>{classLabel(c)}{c.teacherName ? ` — ${c.teacherName}` : ""}</option>
+            ))}
+          </select>
+          <input aria-label="المبلغ الإجمالي" placeholder="المبلغ الإجمالي" dir="ltr" inputMode="numeric" value={draft.tuitionFee} onChange={(e) => set("tuitionFee", e.target.value)} style={{ ...control, ...border("tuitionFee"), width: "130px" }} />
+          <select aria-label="طريقة الدفع" value={draft.paymentPlan} onChange={(e) => set("paymentPlan", e.target.value)} style={control}>
+            <option value="">طريقة الدفع</option>
+            {Object.entries(PAYMENT_PLANS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <label style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+            المباشرة
+            <input type="date" value={draft.enrollmentDate} onChange={(e) => set("enrollmentDate", e.target.value)} style={{ ...control, ...border("enrollmentDate") }} />
+          </label>
+          <button type="submit" disabled={busy || disabled}>{busy ? "جارٍ التسجيل..." : "تسجيل في الدورة الصيفية"}</button>
+        </form>
+      ) : (
+        <p style={{ color: "#64748b", margin: 0 }}>لا توجد شعب للدورة الصيفية.</p>
+      )}
+      {error && <p role="alert" style={{ color: "#dc2626" }}>{error.message}</p>}
     </>
   );
 }

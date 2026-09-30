@@ -2,7 +2,7 @@
 import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
 import { errorResponse, readBody } from "../../../lib/users";
-import { checkStaff, formatStaff } from "../../../lib/staff";
+import { checkStaff, formatStaff, payChange } from "../../../lib/staff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +34,13 @@ export async function POST(request) {
     const checked = checkStaff(body);
     if (checked.error) return errorResponse(checked.error, 400, { field: checked.field });
 
-    const staff = await prisma.staff.create({ data: { ...checked.data, updatedAt: new Date() } });
+    const staff = await prisma.$transaction(async (tx) => {
+      const created = await tx.staff.create({ data: { ...checked.data, updatedAt: new Date() } });
+      // The starting pay opens سجل تغيير الراتب.
+      const change = payChange(created.id, {}, checked.data, user);
+      if (change) await tx.staffPayChange.create({ data: change });
+      return created;
+    });
 
     return Response.json({ staff: formatStaff(staff) }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {

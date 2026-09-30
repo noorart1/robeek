@@ -16,6 +16,11 @@ export async function DELETE(request, { params }) {
     const id = Number((await params).id);
     if (!Number.isSafeInteger(id) || id <= 0) return errorResponse("معرّف الراتب غير صالح.", 400);
 
+    // Receipts are never deleted, so neither is a month that has any.
+    if (await prisma.salaryPayment.count({ where: { salaryId: id } })) {
+      return errorResponse("لهذا الشهر دفعات مسجلة؛ ألغِ الوصولات بدلاً من الحذف.", 409);
+    }
+
     await prisma.salary.delete({ where: { id } });
 
     return Response.json({ success: true }, { headers: { "Cache-Control": "no-store" } });

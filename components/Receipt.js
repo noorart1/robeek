@@ -2,7 +2,7 @@
 import { formatDate } from "../lib/arabic";
 import { iraqToday } from "../lib/dates";
 import { amountInWords } from "../lib/tafqeet";
-import { PAYMENT_TYPES, classLabel, formatMoney, fullName, parentName } from "../lib/labels";
+import { PAYMENT_TYPES, classLabel, formatMoney, fullName, isSummerYear, parentName, yearLabel } from "../lib/labels";
 import { REFUND_TYPES } from "../lib/finance";
 
 const row = { display: "flex", gap: "8px", padding: "7px 0", borderBottom: "1px dotted #cbd5e1" };
@@ -137,9 +137,10 @@ export function ReceiptFrame({ yearName, title, number, children }) {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: "20px", fontWeight: 700, color: "#1e40af" }}>مركز روبيك للتعليم المبكر</div>
           <div style={{ color: "#64748b" }}>
-            {yearName && (
+            {yearName && (isSummerYear(yearName)
+              ? yearLabel(yearName)
               // dir="ltr": after Arabic text "2025-2026" would render as 2026-2025.
-              <>السنة الدراسية <span dir="ltr">{yearName}</span></>
+              : <>السنة الدراسية <span dir="ltr">{yearName}</span></>
             )}
           </div>
         </div>

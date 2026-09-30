@@ -57,11 +57,16 @@ export default function AttendanceBoard() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
 
-        setClasses(data.classes);
+        // The summer course's sections too, marked as such.
+        const all = [
+          ...data.classes,
+          ...(data.summerClasses ?? []).map((c) => ({ ...c, name: `${c.name} (الصيفية)` }))
+        ];
+        setClasses(all);
         setClassesLoaded(true);
         const stored = readStoredClass();
         const initial =
-          data.classes.find((c) => String(c.id) === stored) || data.classes[0];
+          all.find((c) => String(c.id) === stored) || all[0];
         if (initial) setClassId(String(initial.id));
       })
       .catch((err) => setError(err.message || "تعذر تحميل الشعب."));

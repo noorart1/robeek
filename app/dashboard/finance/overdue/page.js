@@ -5,7 +5,7 @@ import { requirePageUser } from "../../../../lib/auth";
 import { formatDate } from "../../../../lib/arabic";
 import { iraqToday } from "../../../../lib/dates";
 import { PAYMENT_PLANS, SHIFTS, classLabel, formatMoney, fullName } from "../../../../lib/labels";
-import { formatStudent, studentSelect } from "../../../../lib/student-data";
+import { formatStudent, overdueViews, studentSelect } from "../../../../lib/student-data";
 import AppHeader from "../../../../components/AppHeader";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ function reminder(student) {
   return (
     `السلام عليكم،\n` +
     `نود تذكيركم بأن قسط الطفل/ة ${fullName(student)}` +
-    `${cls ? ` (${classLabel(cls)})` : ""} في مركز روبيك للتعليم المبكر ` +
+    `${cls ? ` (${classLabel(cls)})` : ""}${student.term === "summer" ? " في الدورة الصيفية" : ""} في مركز روبيك للتعليم المبكر ` +
     `متأخر بمبلغ ${formatMoney(student.financial.overdue)} دينار عراقي.\n` +
     `يرجى تسديده في أقرب وقت. شكراً لتعاونكم.`
   );
@@ -59,7 +59,8 @@ const cell = { padding: "8px 10px", borderBottom: "1px solid #e2e8f0", textAlign
 const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums" };
 
 // المتأخرون عن الدفع: children whose paid tuition is below what their
-// instalment plan says was due by today (lib/dues.js).
+// instalment plan says was due by today (lib/dues.js). A child behind on
+// both the school year and the summer course has a row for each.
 export default async function OverduePage({ searchParams }) {
   const user = await requirePageUser(["ADMIN"]);
   const { shift = "" } = await searchParams;
@@ -71,7 +72,7 @@ export default async function OverduePage({ searchParams }) {
     })
   )
     .map(formatStudent)
-    .filter((s) => s.financial.overdue > 0)
+    .flatMap(overdueViews)
     .filter((s) => !shift || s.enrollment?.class?.shift === shift)
     .sort((a, b) => b.financial.overdue - a.financial.overdue);
 
@@ -104,9 +105,9 @@ export default async function OverduePage({ searchParams }) {
         </p>
         <h1 style={{ color: "#1e40af", marginBottom: "4px" }}>المتأخرون عن الدفع</h1>
         <p style={{ color: "#64748b", marginTop: 0 }}>
-          حتى {formatDate(iraqToday())}: {students.length} أطفال، مجموع المتأخر{" "}
+          حتى {formatDate(iraqToday())}: {new Set(students.map((s) => s.id)).size} أطفال، مجموع المتأخر{" "}
           <strong style={{ color: "#b91c1c" }}>{formatMoney(total)} د.ع</strong>. المستحق يُحسب من
-          الأقساط: الشهري على أشهر السنة حتى أيار، والسنوي على دفعتين.
+          الأقساط: الشهري على أشهر السنة حتى أيار، والسنوي على دفعتين؛ في الدورة الصيفية الشهري حتى آب والسنوي دفعة واحدة.
         </p>
 
         <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
@@ -131,12 +132,15 @@ export default async function OverduePage({ searchParams }) {
             </thead>
             <tbody>
               {students.map((s, index) => (
-                <tr key={s.id}>
+                <tr key={`${s.id}-${s.term ?? ""}`}>
                   <td style={{ ...cell, color: "#94a3b8" }}>{index + 1}</td>
                   <td style={{ ...cell, fontWeight: 600 }}>
                     {fullName(s)} <small style={{ color: "#94a3b8" }}>{s.studentCode}</small>
                   </td>
-                  <td style={cell}>{classLabel(s.enrollment?.class)}</td>
+                  <td style={cell}>
+                    {classLabel(s.enrollment?.class)}
+                    {s.term === "summer" && <span style={{ color: "#ea580c" }}> (الصيفية)</span>}
+                  </td>
                   <td style={cell}>
                     {PAYMENT_PLANS[s.enrollment?.paymentPlan] || (
                       <span style={{ color: "#b45309" }} title="غير محددة؛ حُسبت كشهري">شهري؟</span>
