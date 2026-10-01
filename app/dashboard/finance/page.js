@@ -27,13 +27,19 @@ const TABS = {
 };
 const BOARD = { general: "GENERAL", fixed: "ASSET" };
 
-function Tabs({ tab }) {
+// The chosen school year and month (?year, ?month) go with every tab.
+const keep = (params) => ({
+  ...(params.year && { year: params.year }),
+  ...(params.month && { month: params.month })
+});
+
+function Tabs({ tab, params }) {
   return (
     <nav style={{ display: "flex", gap: "6px", marginBottom: "16px", borderBottom: "1px solid #e2e8f0" }}>
       {Object.entries(TABS).map(([key, label]) => (
         <Link
           key={key}
-          href={key === "summary" ? "/dashboard/finance" : `/dashboard/finance?tab=${key}`}
+          href={`/dashboard/finance?${new URLSearchParams({ ...(key !== "summary" && { tab: key }), ...keep(params) })}`}
           aria-current={tab === key ? "page" : undefined}
           style={{
             padding: "8px 16px",
@@ -102,7 +108,7 @@ export default async function FinancePage({ searchParams }) {
         <AppHeader user={user} active="/dashboard/finance" />
         <main style={{ maxWidth: "1440px", margin: "24px auto", padding: "0 20px" }}>
           <h1 style={{ color: "#1e40af", marginBottom: "12px" }}>الملف المالي والأرصدة</h1>
-          <Tabs tab={tab} />
+          <Tabs tab={tab} params={params} />
           {tab === "salaries" ? <SalariesBoard /> : <ExpensesBoard key={tab} kind={BOARD[tab]} />}
         </main>
       </>
@@ -260,7 +266,7 @@ export default async function FinancePage({ searchParams }) {
           {years.map((y) => (
             <Link
               key={y.id}
-              href={`/dashboard/finance?${new URLSearchParams({ ...(tab === "box" && { tab }), ...(!y.isActive && { year: y.id }) })}`}
+              href={`/dashboard/finance?${new URLSearchParams({ ...(tab === "box" && { tab }), ...(!y.isActive && { year: y.id }), ...(params.month && { month: params.month }) })}`}
               aria-current={y.id === year?.id ? "page" : undefined}
               dir="ltr"
               style={{
@@ -278,7 +284,7 @@ export default async function FinancePage({ searchParams }) {
           <span style={{ marginInlineStart: "auto" }}>المبالغ بالدينار العراقي</span>
         </div>
 
-        <Tabs tab={tab} />
+        <Tabs tab={tab} params={params} />
 
         {tab === "summary" && (<>
         {isActiveYear && (

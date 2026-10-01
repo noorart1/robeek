@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { control, send } from "./StaffManager";
+import { useUrlMonth } from "./url-month";
 import { formatDate } from "../lib/arabic";
 import { iraqToday } from "../lib/dates";
 import { PAYMENT_METHODS, formatMoney } from "../lib/labels";
@@ -14,7 +15,7 @@ import { EXPENSE_CATEGORIES, EXPENSE_ITEMS, PARTNERS } from "../lib/finance";
 // name them («سحب البراق») to count in حصص الشركاء.
 const BOARDS = {
   GENERAL: { categories: ["GENERAL"], items: ["الكهرباء", "ماء", "انترنت", ...EXPENSE_ITEMS], noun: "مصروف", empty: "لا توجد مصاريف عامة في هذا الشهر." },
-  ASSET: { categories: ["ASSET"], items: EXPENSE_ITEMS, noun: "مصروف ثابت", empty: "لا توجد مصاريف ثابتة في هذا الشهر." },
+  ASSET: { categories: ["ASSET"], items: ["رسوم ادارية", "العاب وديكور", "تطوير", "اجهزة"], noun: "مصروف ثابت", empty: "لا توجد مصاريف ثابتة في هذا الشهر." },
   // تسليم الإدارة is worked out from the receipts now: its old hand-entered
   // rows are listed (and editable) but no new ones are added.
   BOX: {
@@ -42,10 +43,13 @@ const blank = (month, category) => ({
 // corrected or removed here.
 export default function ExpensesBoard({ kind = "GENERAL" }) {
   const board = BOARDS[kind];
-  const [month, setMonth] = useState(() => iraqToday().slice(0, 7));
+  const [month, setMonth] = useUrlMonth();
   const [expenses, setExpenses] = useState(null);
-  const [form, setForm] = useState(() => blank(iraqToday().slice(0, 7), board.categories[0]));
+  const [form, setForm] = useState(() => blank(month, board.categories[0]));
   const [editingId, setEditingId] = useState(null);
+  // البند: chosen from the board's list, or typed by hand («أخرى»). A
+  // datalist hid every item but the one already typed.
+  const [customItem, setCustomItem] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -66,6 +70,7 @@ export default function ExpensesBoard({ kind = "GENERAL" }) {
 
   function reset() {
     setForm(blank(month, board.categories[0]));
+    setCustomItem(false);
     setEditingId(null);
     setError(null);
   }
@@ -103,6 +108,7 @@ export default function ExpensesBoard({ kind = "GENERAL" }) {
   function edit(expense) {
     setEditingId(expense.id);
     setForm({ ...expense, paymentMethod: expense.paymentMethod ?? "", notes: expense.notes ?? "" });
+    setCustomItem(!board.items.includes(expense.item));
     setError(null);
   }
 
@@ -125,9 +131,25 @@ export default function ExpensesBoard({ kind = "GENERAL" }) {
         style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", padding: "12px", backgroundColor: "#ffffff", borderRadius: "12px", marginBottom: "12px" }}
       >
         <strong style={{ color: "#1e40af", width: "100%" }}>{editingId ? `تعديل ${board.noun}` : `${board.noun} جديد${kind === "BOX" ? "ة" : ""}`}</strong>
-        <datalist id={`items-${kind}`}>{board.items.map((i) => <option key={i} value={i} />)}</datalist>
         <input type="date" aria-label="التاريخ" required value={form.date} onChange={(e) => set("date", e.target.value)} style={{ ...control, ...border("date") }} />
-        <input aria-label="البند" placeholder={kind === "BOX" ? "البند" : "بند المصروف"} list={`items-${kind}`} required maxLength={191} value={form.item} onChange={(e) => set("item", e.target.value)} style={{ ...control, ...border("item"), width: "150px" }} />
+        {customItem ? (
+          <span style={{ display: "inline-flex", gap: "4px" }}>
+            <input aria-label="البند" placeholder="اكتب البند" autoFocus required maxLength={191} value={form.item} onChange={(e) => set("item", e.target.value)} style={{ ...control, ...border("item"), width: "150px" }} />
+            <button type="button" title="الاختيار من القائمة" onClick={() => { setCustomItem(false); set("item", ""); }}>↩</button>
+          </span>
+        ) : (
+          <select
+            aria-label="البند"
+            required
+            value={form.item}
+            onChange={(e) => (e.target.value === "__other" ? (setCustomItem(true), set("item", "")) : set("item", e.target.value))}
+            style={{ ...control, ...border("item") }}
+          >
+            <option value="">{kind === "BOX" ? "— البند —" : "— بند المصروف —"}</option>
+            {board.items.map((i) => <option key={i} value={i}>{i}</option>)}
+            <option value="__other">أخرى (كتابة يدوية)…</option>
+          </select>
+        )}
         {picker && (
           <select aria-label="النوع" value={form.category} onChange={(e) => set("category", e.target.value)} style={control}>
             {choices.map((v) => <option key={v} value={v}>{EXPENSE_CATEGORIES[v]}</option>)}

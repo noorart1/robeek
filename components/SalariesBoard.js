@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { StaffDialog, control, send } from "./StaffManager";
-import { iraqToday } from "../lib/dates";
+import { useUrlMonth } from "./url-month";
 import { formatDate } from "../lib/arabic";
 import { parseAmount } from "../lib/digits";
 import { PAYMENT_METHODS, SHIFTS, formatMoney } from "../lib/labels";
@@ -19,7 +19,7 @@ const small = { ...control, padding: "5px 6px" };
 // is left. «دفع الباقي» pays the rest in one receipt; part payments,
 // receipts and voiding are in the person's window (click the name).
 export default function SalariesBoard() {
-  const [month, setMonth] = useState(() => iraqToday().slice(0, 7));
+  const [month, setMonth] = useUrlMonth();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(null); // staff id shown in the dialog
