@@ -160,16 +160,16 @@ test("staff: name required, amounts and dates parsed, bad phone refused", async 
   assert.equal(checkStaff({ name: "س", baseSalary: "كثير" }).field, "baseSalary");
   assert.equal(checkStaff({ name: "س", startDate: "2026-02-30" }).field, "startDate");
 
-  const { data } = checkStaff({ name: " هبة ", phone: "٠٧٧٠ ١٢٣ ٤٥٦٧", baseSalary: "450,000", bonus: "", startDate: "2026-06-07" });
+  const { data } = checkStaff({ name: " هبة ", phone: "٠٧٧٠ ١٢٣ ٤٥٦٧", baseSalary: "450,000", bonus: "100", startDate: "2026-06-07" });
   assert.equal(data.name, "هبة");
   assert.equal(data.phone, "0770 123 4567");
   assert.equal(data.baseSalary, 450000);
-  assert.equal(data.bonus, null);
+  assert.equal("bonus" in data, false); // «المكافآت» is no longer entered
   assert.equal(data.startDate.toISOString().slice(0, 10), "2026-06-07");
   assert.equal(data.isActive, true);
 });
 
-test("salary: net = salary + bonus − deductions, never negative", async () => {
+test("salary: net = salary − deductions, never negative; no bonus entered", async () => {
   const { checkSalary } = await import("../lib/staff.js");
   const base = { staffId: 1, month: "2026-09", baseSalary: "700000" };
 
@@ -178,7 +178,7 @@ test("salary: net = salary + bonus − deductions, never negative", async () => 
   assert.equal(checkSalary({ ...base, deduction: "800000" }).field, "deduction");
 
   const { data } = checkSalary({ ...base, bonus: "160000", deduction: "200000" });
-  assert.deepEqual([data.baseSalary, data.bonus, data.deduction], [700000, 160000, 200000]);
+  assert.deepEqual([data.baseSalary, data.bonus, data.deduction], [700000, undefined, 200000]);
 });
 
 test("salary payment: positive amount, valid month/date/method; voided never count", async () => {
@@ -212,17 +212,17 @@ test("salary payment: positive amount, valid month/date/method; voided never cou
   assert.deepEqual([refunded.paid, refunded.remaining], [650000, 50000]);
 });
 
-test("pay change: logged only when salary or bonus really changes", async () => {
+test("pay change: logged only when the salary really changes", async () => {
   const { payChange } = await import("../lib/staff.js");
   const user = { fullName: "المدير" };
 
   // Prisma Decimals (strings here) against parsed numbers: equal is no change.
   assert.equal(payChange(1, { baseSalary: "1000.00", bonus: null }, { baseSalary: 1000, bonus: null }, user), null);
   assert.deepEqual(payChange(1, { baseSalary: "1000.00", bonus: null }, { baseSalary: 2000, bonus: null }, user), {
-    staffId: 1, oldBaseSalary: 1000, newBaseSalary: 2000, oldBonus: null, newBonus: null, changedBy: "المدير"
+    staffId: 1, oldBaseSalary: 1000, newBaseSalary: 2000, changedBy: "المدير"
   });
   assert.equal(payChange(1, {}, { baseSalary: null, bonus: null }, user), null);
-  assert.equal(payChange(1, { baseSalary: 1000, bonus: 0 }, { baseSalary: 1000, bonus: 50 }, user).newBonus, 50);
+  assert.equal(payChange(1, { baseSalary: 1000, bonus: 0 }, { baseSalary: 1000, bonus: 50 }, user), null);
 });
 
 test("monthly summary: income by method, refunds and spending by month", async () => {
@@ -326,4 +326,21 @@ test("paid totals: refunds subtract from their own kind, voided never count", as
     ]),
     { tuition: 600, curriculum: 50 }
   );
+});
+
+test("registering ahead of the term starts on its first day, never earlier than today", async () => {
+  const { defaultEnrollmentDate } = await import("../lib/enrollment-fields.js");
+  const day = (...args) => defaultEnrollmentDate(...args).toISOString().slice(0, 10);
+  assert.equal(day("2027-2028", "MORNING", "2027-07-15"), "2027-10-01");
+  assert.equal(day("2027-2028", "EVENING", "2027-07-15"), "2027-11-01");
+  assert.equal(day("صيف 2027", null, "2027-04-10"), "2027-05-01");
+  assert.equal(day("2026-2027", "MORNING", "2027-01-20"), "2027-01-20");
+  assert.equal(day("whatever", "MORNING", "2027-01-20"), "2027-01-20");
+});
+
+test("the summer that can be started: this year's until August, then next year's", async () => {
+  const { upcomingSummerName } = await import("../lib/labels.js");
+  assert.equal(upcomingSummerName("2026-08-31"), "صيف 2026");
+  assert.equal(upcomingSummerName("2026-09-01"), "صيف 2027");
+  assert.equal(upcomingSummerName("2027-01-15"), "صيف 2027");
 });

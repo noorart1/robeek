@@ -1,7 +1,7 @@
 
 import prisma from "../../../../../lib/prisma";
 import { getCurrentUser } from "../../../../../lib/auth";
-import { validateEnrollment } from "../../../../../lib/enrollment-fields";
+import { defaultEnrollmentDate, validateEnrollment } from "../../../../../lib/enrollment-fields";
 import { loadStudent } from "../../../../../lib/student-data";
 
 export const runtime = "nodejs";
@@ -50,7 +50,7 @@ export async function PUT(request, { params }) {
 
     const [student, cls] = await Promise.all([
       prisma.student.findUnique({ where: { id: studentId }, select: { id: true } }),
-      prisma.class.findUnique({ where: { id: data.classId } })
+      prisma.class.findUnique({ where: { id: data.classId }, include: { AcademicYear: { select: { name: true } } } })
     ]);
 
     if (!student) {
@@ -69,6 +69,7 @@ export async function PUT(request, { params }) {
         }
       },
       create: {
+        enrollmentDate: defaultEnrollmentDate(cls.AcademicYear.name, cls.shift),
         ...data,
         studentId,
         academicYearId: cls.academicYearId

@@ -43,7 +43,7 @@ export async function GET(request) {
   }
 }
 
-//   PUT { staffId, month, baseSalary, bonus?, deduction?, notes? }
+//   PUT { staffId, month, baseSalary, deduction?, notes? }
 // Sets (or corrects) what that person is due for that month. Paying it
 // is POST /api/salaries/payments.
 
@@ -76,15 +76,15 @@ export async function PUT(request) {
       });
 
       // The person's newest recorded month is their current pay: keep
-      // «الكادر» showing the same salary and bonus.
+      // «الكادر» showing the same salary.
       const newer = await tx.salary.count({ where: { staffId, month: { gt: month } } });
       if (!newer) {
-        const before = await tx.staff.findUnique({ where: { id: staffId }, select: { baseSalary: true, bonus: true } });
+        const before = await tx.staff.findUnique({ where: { id: staffId }, select: { baseSalary: true } });
         const change = before && payChange(staffId, before, fields, user);
         if (change) {
           await tx.staff.update({
             where: { id: staffId },
-            data: { baseSalary: fields.baseSalary, bonus: fields.bonus, updatedAt: new Date() }
+            data: { baseSalary: fields.baseSalary, updatedAt: new Date() }
           });
           await tx.staffPayChange.create({ data: change });
         }

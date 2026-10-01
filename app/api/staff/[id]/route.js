@@ -1,7 +1,7 @@
 
 import prisma from "../../../../lib/prisma";
 import { getCurrentUser } from "../../../../lib/auth";
-import { errorResponse, readBody } from "../../../../lib/users";
+import { errorResponse, readBody, renameStaff } from "../../../../lib/users";
 import { checkStaff, formatSalary, formatSalaryPayment, formatStaff, netSalary, payChange, salaryPaid } from "../../../../lib/staff";
 import { iraqToday } from "../../../../lib/dates";
 
@@ -72,10 +72,10 @@ export async function PATCH(request, { params }) {
     const checked = checkStaff(body);
     if (checked.error) return errorResponse(checked.error, 400, { field: checked.field });
 
-    const { baseSalary, bonus } = checked.data;
+    const { baseSalary } = checked.data;
     // The current month's salary (and any later one) follows «الكادر»;
     // earlier months stay as they were paid.
-    const before = await prisma.staff.findUnique({ where: { id }, select: { baseSalary: true, bonus: true } });
+    const before = await prisma.staff.findUnique({ where: { id }, select: { name: true, baseSalary: true } });
     if (!before) return errorResponse("الموظف غير موجود.", 404);
     const change = payChange(id, before, checked.data, user);
     const current = baseSalary === null || !change
@@ -84,7 +84,7 @@ export async function PATCH(request, { params }) {
           where: { staffId: id, month: { gte: iraqToday().slice(0, 7) } },
           include: { SalaryPayment: true }
         });
-    if (current.some((s) => netSalary({ baseSalary, bonus, deduction: s.deduction }) < salaryPaid(s.SalaryPayment))) {
+    if (current.some((s) => netSalary({ baseSalary, bonus: s.bonus, deduction: s.deduction }) < salaryPaid(s.SalaryPayment))) {
       return errorResponse("الراتب الجديد أقل مما دُفع لهذا الشهر (أو من خصوماته).", 400, { field: "baseSalary" });
     }
 
@@ -96,10 +96,11 @@ export async function PATCH(request, { params }) {
       ...current.map((s) =>
         prisma.salary.update({
           where: { id: s.id },
-          data: { baseSalary, bonus: bonus ?? 0, updatedAt: new Date() }
+          data: { baseSalary, updatedAt: new Date() }
         })
       ),
-      ...(change ? [prisma.staffPayChange.create({ data: change })] : [])
+      ...(change ? [prisma.staffPayChange.create({ data: change })] : []),
+      ...(checked.data.name !== before.name ? renameStaff(prisma, id, checked.data.name) : [])
     ]);
 
     return Response.json({ staff: formatStaff(staff) }, { headers: { "Cache-Control": "no-store" } });

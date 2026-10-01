@@ -65,7 +65,10 @@ the repo — they hold children's personal data. Accounts and passwords are
 production's, since the data is. A fresh machine needs the MariaDB zip
 unpacked to `../mariadb`, `mariadb-install-db.exe --datadir=…/data`, a
 `data/my.ini` with `bind-address=127.0.0.1`, and the `.env` database and
-user created in it.
+user created in it. The MariaDB client tools are not on PATH, so `.env`
+also needs `MYSQLDUMP` and `MYSQL` pointing at `../mariadb/bin/*.exe`;
+without them every backup fails, and so does starting a year (it backs up
+first).
 
 ## Deployment
 
@@ -267,6 +270,14 @@ sections. When adding a route, decide its roles explicitly — the default
 in this codebase is ADMIN only. Accounts are managed at
 `/dashboard/users`; guards there keep at least one active admin and stop
 an admin from deactivating or demoting themselves.
+
+A teacher is one row in الكادر (`Staff`). A section's المرشدة is chosen
+from that list on the dashboard (`Class.staffId`), and an account can be
+linked to it (`User.staffId`, at most one each); the helpers in
+`lib/users.js` keep them in step: renaming her in الكادر renames her
+account and her sections, and choosing her for a section gives her
+account (if a TEACHER) that section. `Class.teacherName` stays the
+displayed name; a name typed before the link shows with ⚠.
 
 ## Table UI conventions (`components/`)
 

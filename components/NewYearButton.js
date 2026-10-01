@@ -7,8 +7,9 @@ import { send } from "./StaffManager";
 import { yearLabel } from "../lib/labels";
 
 // بدء سنة دراسية جديدة (POST /api/academic-years), or with `summer` (its
-// name, «صيف 2026») بدء الدورة الصيفية.
-export default function NewYearButton({ next, current, summer }) {
+// name, «صيف 2026») بدء الدورة الصيفية. `locked` (why it cannot be started
+// yet): shown, but disabled.
+export default function NewYearButton({ next, current, summer, locked }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
@@ -48,9 +49,10 @@ export default function NewYearButton({ next, current, summer }) {
 
   return (
     <span style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
-      <button type="button" disabled={busy} onClick={start}>
+      <button type="button" disabled={busy || !!locked} onClick={start}>
         {busy ? "جارٍ البدء..." : summer ? `+ بدء ${yearLabel(summer)}` : `+ بدء السنة الدراسية ${next}`}
       </button>
+      {locked && <span style={{ color: "#64748b", fontSize: "13px" }}>({locked})</span>}
       {message && (
         <span role={message.ok ? "status" : "alert"} style={{ color: message.ok ? "#15803d" : "#dc2626" }}>
           {message.text}

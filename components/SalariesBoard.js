@@ -49,7 +49,7 @@ export default function SalariesBoard() {
   // Totals cover everyone listed: a month not saved yet is due the
   // person's usual salary, as its row shows.
   const rows = (data?.staff ?? []).map((person) => {
-    const due = (person.baseSalary ?? 0) + (person.bonus ?? 0);
+    const due = person.baseSalary ?? 0;
     return salaryOf(person.id) ?? { net: due, paid: 0, remaining: due };
   });
   const sum = (field) => rows.reduce((total, s) => total + s[field], 0);
@@ -70,7 +70,6 @@ export default function SalariesBoard() {
               <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
                 <th style={cell}>الاسم</th>
                 <th style={money}>الراتب</th>
-                <th style={money}>المكافآت</th>
                 <th style={money}>الخصومات / السلف</th>
                 <th style={money}>الصافي</th>
                 <th style={money}>المدفوع</th>
@@ -85,7 +84,7 @@ export default function SalariesBoard() {
                 // An unsaved row restarts from the person's current salary once «الكادر» changes it.
                 return (
                   <SalaryRow
-                    key={`${month}-${person.id}-${salary ? `${salary.updatedAt}-${salary.paid}` : `new-${person.baseSalary}-${person.bonus}`}`}
+                    key={`${month}-${person.id}-${salary ? `${salary.updatedAt}-${salary.paid}` : `new-${person.baseSalary}`}`}
                     person={person}
                     salary={salary}
                     month={month}
@@ -97,12 +96,12 @@ export default function SalariesBoard() {
                 );
               })}
               {data.staff.length === 0 && (
-                <tr><td colSpan={9} style={{ ...cell, color: "#64748b" }}>لا يوجد موظفون نشطون. أضفهم من صفحة «الكادر».</td></tr>
+                <tr><td colSpan={8} style={{ ...cell, color: "#64748b" }}>لا يوجد موظفون نشطون. أضفهم من صفحة «الكادر».</td></tr>
               )}
             </tbody>
             <tfoot>
               <tr style={{ fontWeight: "bold", backgroundColor: "#f8fafc" }}>
-                <td style={cell} colSpan={4}>
+                <td style={cell} colSpan={3}>
                   المجموع (مدفوع بالكامل: {salaries.filter((s) => s.remaining <= 0).length} من {data.staff.length})
                 </td>
                 <td style={money}>{formatMoney(sum("net"))}</td>
@@ -143,7 +142,6 @@ export default function SalariesBoard() {
 function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen }) {
   const initial = {
     baseSalary: salary?.baseSalary ?? person.baseSalary ?? "",
-    bonus: salary?.bonus ?? person.bonus ?? "",
     deduction: salary?.deduction ?? "",
     notes: salary?.notes ?? ""
   };
@@ -155,7 +153,7 @@ function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen }) 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const border = (field) => (error?.field === field ? { borderColor: "#dc2626" } : undefined);
   const amount = (value) => parseAmount(value) ?? 0;
-  const net = netSalary({ baseSalary: amount(form.baseSalary), bonus: amount(form.bonus), deduction: amount(form.deduction) });
+  const net = netSalary({ baseSalary: amount(form.baseSalary), bonus: salary?.bonus, deduction: amount(form.deduction) });
   const paid = salary?.paid ?? 0;
   const remaining = net - paid;
   const dirty = !salary || Object.keys(initial).some((key) => String(form[key]) !== String(initial[key]));
@@ -242,7 +240,6 @@ function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen }) 
         {error && <div role="alert" style={{ color: "#dc2626", fontSize: "12px", whiteSpace: "normal" }}>{error.message}</div>}
       </td>
       <td style={money}>{amountInput("baseSalary")}</td>
-      <td style={money}>{amountInput("bonus")}</td>
       <td style={money}>{amountInput("deduction")}</td>
       <td style={{ ...money, fontWeight: 600 }}>{formatMoney(net)}</td>
       <td style={{ ...money, color: "#15803d" }}>{formatMoney(paid)}</td>

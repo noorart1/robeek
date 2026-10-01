@@ -8,6 +8,7 @@ import {
   checkFullName,
   checkPassword,
   checkRole,
+  checkStaffId,
   checkUsername,
   errorResponse,
   formatUser,
@@ -45,7 +46,9 @@ export async function GET() {
   }
 }
 
-//   POST { username, fullName, password, role: ADMIN|TEACHER, classIds? }
+//   POST { username, fullName, password, role: ADMIN|TEACHER, classIds?, staffId? }
+// With staffId the account belongs to that person in الكادر and takes
+// her name from there.
 
 export async function POST(request) {
   try {
@@ -75,7 +78,12 @@ export async function POST(request) {
       return errorResponse(failed.error, 400, { field: failed.field });
     }
 
-    const [username, fullName, password, role, classIds] = checks.map((c) => c.value);
+    const staff = await checkStaffId(prisma, body.staffId);
+    if (staff.error) return errorResponse(staff.error, 400, { field: staff.field });
+
+    const [username, typedName, password, role, classIds] = checks.map((c) => c.value);
+    const fullName = staff.staff?.name ?? typedName;
+    const staffId = staff.value ?? null;
     const passwordHash = await bcrypt.hash(password, 12);
 
     const id = await prisma.$transaction(async (tx) => {
@@ -85,6 +93,7 @@ export async function POST(request) {
           fullName,
           passwordHash,
           role,
+          staffId,
           isActive: true,
           updatedAt: new Date()
         },
@@ -92,7 +101,7 @@ export async function POST(request) {
       });
 
       if (role === "TEACHER") {
-        await assignClasses(tx, created.id, fullName, classIds);
+        await assignClasses(tx, created.id, fullName, classIds, staffId);
       }
 
       return created.id;
@@ -103,6 +112,10 @@ export async function POST(request) {
       { status: 201, headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
+    if (error.code === "P2002" && String(error.meta?.target).includes("staffId")) {
+      return errorResponse("هذا الموظف مرتبط بحساب آخر.", 409, { field: "staffId" });
+    }
+
     if (error.code === "P2002") {
       return errorResponse("اسم المستخدم مستخدم مسبقاً.", 409, { field: "username" });
     }

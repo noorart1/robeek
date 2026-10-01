@@ -1,31 +1,25 @@
-
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 
-// The section's teacher (المرشدة), editable in place on the dashboard.
-// Enter saves, Escape cancels; an empty name clears it.
+// The section's teacher (المرشدة), chosen on the dashboard from الكادر
+// (`staff`, active people), so her name is kept in one place. Choosing
+// saves; Escape cancels. A name typed before the link existed shows with
+// ⚠ until she is chosen from the list.
 
-export default function TeacherCell({ classId, teacherName, sectionName }) {
+export default function TeacherCell({ classId, teacherName, staffId, staff, sectionName }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  function start() {
-    setDraft(teacherName || "");
-    setError("");
-    setEditing(true);
-  }
-
-  async function save(event) {
-    event.preventDefault();
+  async function save(value) {
     if (busy) return;
+    if (value === "typed") return setEditing(false);
 
-    if (draft.trim() === (teacherName || "")) {
+    if (value === String(staffId ?? "") && (value || !teacherName)) {
       setEditing(false);
       return;
     }
@@ -37,7 +31,7 @@ export default function TeacherCell({ classId, teacherName, sectionName }) {
       const response = await fetch(`/api/classes/${classId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teacherName: draft })
+        body: JSON.stringify({ staffId: value ? Number(value) : null })
       });
 
       if (redirectIfSignedOut(response)) throw new Error(SESSION_EXPIRED);
@@ -56,15 +50,13 @@ export default function TeacherCell({ classId, teacherName, sectionName }) {
 
   if (editing) {
     return (
-      <form onSubmit={save} style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
-        <input
+      <span style={{ display: "inline-flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
+        <select
           aria-label={`مرشدة الشعبة ${sectionName}`}
-          placeholder="اسم المرشدة"
           autoFocus
-          maxLength={100}
-          value={draft}
           disabled={busy}
-          onChange={(event) => setDraft(event.target.value)}
+          defaultValue={staffId ?? (teacherName ? "typed" : "")}
+          onChange={(event) => save(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
@@ -72,35 +64,45 @@ export default function TeacherCell({ classId, teacherName, sectionName }) {
             }
           }}
           style={{
-            width: "120px",
+            maxWidth: "200px",
             padding: "5px 7px",
             border: `1px solid ${error ? "#dc2626" : "#cbd5e1"}`,
             borderRadius: "6px"
           }}
-        />
-        <button type="submit" disabled={busy}>{busy ? "..." : "حفظ"}</button>
+        >
+          {teacherName && !staffId && <option value="typed">⚠ {teacherName} (مكتوب يدوياً)</option>}
+          <option value="">— بدون مرشدة —</option>
+          {staff.map((person) => (
+            <option key={person.id} value={person.id}>
+              {person.name}{person.job ? ` (${person.job})` : ""}
+            </option>
+          ))}
+        </select>
         <button type="button" disabled={busy} onClick={() => setEditing(false)}>إلغاء</button>
         {error && <small role="alert" style={{ color: "#dc2626", width: "100%" }}>{error}</small>}
-      </form>
+      </span>
     );
   }
+
+  const unlinked = teacherName && !staffId;
 
   return (
     <button
       type="button"
-      onClick={start}
-      title="تعديل اسم المرشدة"
+      onClick={() => { setError(""); setEditing(true); }}
+      title={unlinked ? "اسم مكتوب يدوياً — اختر المرشدة من الكادر" : "تغيير المرشدة"}
       style={{
         background: "none",
         border: "none",
         padding: "2px 0",
         cursor: "pointer",
-        color: teacherName ? "#475569" : "#94a3b8",
+        color: unlinked ? "#b45309" : teacherName ? "#475569" : "#94a3b8",
         display: "inline-flex",
         gap: "4px",
         alignItems: "center"
       }}
     >
+      {unlinked && "⚠ "}
       {teacherName || "+ إضافة مرشدة"}
       {teacherName && <span style={{ color: "#94a3b8", fontSize: "12px" }}>✎</span>}
     </button>

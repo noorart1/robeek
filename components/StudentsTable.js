@@ -101,7 +101,8 @@ const NEW = "new";
 // summer course, with its section, fee and payments in place of the
 // school year's (formatStudent's `summer`). Otherwise the school year,
 // without the children who only come for the summer.
-export default function StudentsTable({ initialClassId = "", initialReview = false, term = "" }) {
+// yearId: a year that is over (formatStudent's `past`), as an archive tab.
+export default function StudentsTable({ initialClassId = "", initialReview = false, term = "", yearId = "" }) {
   const summerView = term === "summer";
   const [students, setStudents] = useState([]);
   const [allOptions, setOptions] = useState({ classes: [], summerClasses: [], lines: [] });
@@ -269,12 +270,36 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
     setLastSync(new Date());
   }
 
-  const options = summerView
-    ? { ...allOptions, classes: allOptions.summerClasses ?? [], academicYear: allOptions.summerYear }
-    : allOptions;
-  const shown = summerView
-    ? students.filter((s) => s.summer).map((s) => ({ ...s, ...s.summer }))
-    : students.filter((s) => s.enrollment || !s.summer);
+  // Earlier years, newest first, from the children's own enrollments.
+  const pastYears = [...new Map(
+    students.flatMap((s) => s.past ?? []).map((p) => [String(p.enrollment.academicYear.id), p.enrollment.academicYear])
+  ).values()].sort((a, b) => b.id - a.id);
+  const pastYear = pastYears.find((y) => String(y.id) === yearId);
+  const pastRows = pastYear
+    ? students.flatMap((s) => {
+        const p = s.past?.find((e) => e.enrollment.academicYear.id === pastYear.id);
+        return p ? [{ ...s, ...p }] : [];
+      })
+    : [];
+
+  const options = pastYear
+    ? {
+        ...allOptions,
+        academicYear: pastYear.name,
+        // Its sections, as its children were in them.
+        classes: [...new Map(pastRows.map((s) => [s.enrollment.class.id, s.enrollment.class])).values()]
+          .sort((a, b) => (b.shift || "").localeCompare(a.shift || "") || a.name.localeCompare(b.name)),
+        summerYear: null,
+        summerClasses: []
+      }
+    : summerView
+      ? { ...allOptions, classes: allOptions.summerClasses ?? [], academicYear: allOptions.summerYear }
+      : allOptions;
+  const shown = pastYear
+    ? pastRows
+    : summerView
+      ? students.filter((s) => s.summer).map((s) => ({ ...s, ...s.summer }))
+      : students.filter((s) => s.enrollment || !s.summer);
 
   const shownClasses = options.classes.filter((cls) => !shift || cls.shift === shift);
 
@@ -452,19 +477,23 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
         )}
       </h1>
 
-      {allOptions.summerYear && (
-        <nav style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
-          {[["", yearLabel(allOptions.academicYear)], ["summer", yearLabel(allOptions.summerYear)]].map(([value, label]) => (
+      {(allOptions.summerYear || pastYears.length > 0) && (
+        <nav style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
+          {[
+            ["/dashboard/students", yearLabel(allOptions.academicYear), !pastYear && !summerView, "#2563eb"],
+            ...(allOptions.summerYear ? [["/dashboard/students?term=summer", yearLabel(allOptions.summerYear), !pastYear && summerView, "#ea580c"]] : []),
+            ...pastYears.map((y) => [`/dashboard/students?year=${y.id}`, yearLabel(y.name), pastYear?.id === y.id, "#475569"])
+          ].map(([href, label, current, color]) => (
             <a
-              key={value}
-              href={value ? "/dashboard/students?term=summer" : "/dashboard/students"}
-              aria-current={term === value ? "page" : undefined}
+              key={href}
+              href={href}
+              aria-current={current ? "page" : undefined}
               style={{
                 padding: "6px 14px",
                 borderRadius: "6px",
                 textDecoration: "none",
-                color: term === value ? "#ffffff" : "#1e40af",
-                backgroundColor: term === value ? (value ? "#ea580c" : "#2563eb") : "#eff6ff"
+                color: current ? "#ffffff" : "#1e40af",
+                backgroundColor: current ? color : "#eff6ff"
               }}
             >
               {label}
@@ -474,7 +503,7 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
       )}
 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "10px" }}>
-        <button
+        {!pastYear && <button
           type="button"
           onClick={() => { setNotice(""); setDialogId(NEW); }}
           style={{
@@ -487,7 +516,7 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
           }}
         >
           + إضافة طفل
-        </button>
+        </button>}
 
         <input
           aria-label="البحث عن طفل"

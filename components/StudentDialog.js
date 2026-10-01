@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import ParentLinkCell from "./ParentLinkCell";
 import StudentPhoto, { toJpeg } from "./StudentPhoto";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
+import { closeOnBackdrop, confirmDiscard } from "./dialog";
 import { formatDate } from "../lib/arabic";
 import {
   ATTENDANCE_TYPES,
@@ -159,10 +160,30 @@ export default function StudentDialog({
     return () => onEditingChange?.(false);
   }, []);
 
+  // A parent's name or phone being edited in its own cell (saved on Enter)
+  // counts as unsaved too.
+  const openCells = useRef(0);
+  function cellEditing(isEditing) {
+    openCells.current = Math.max(0, openCells.current + (isEditing ? 1 : -1));
+    onEditingChange?.(isEditing);
+  }
+
   function requestClose() {
     if (saving) return;
 
-    if (dirty && !window.confirm("هل تريد إغلاق النافذة دون حفظ التغييرات؟")) {
+    if (
+      (dirty || openCells.current > 0) &&
+      !confirmDiscard(
+        isNew ? "طفل جديد" : `تعديل: ${fullName(student)}`,
+        isNew
+          ? []
+          : [
+              ...fields.filter((f) => changed.includes(f.name)).map((f) => [f.label, displayOption(f, original[f.name]), displayOption(f, form[f.name])]),
+              ...enrollmentFields.filter((f) => enrollChanged.includes(f.name)).map((f) => [f.label, displayOption(f, enrollOriginal[f.name]), displayOption(f, enroll[f.name])])
+            ],
+        openCells.current > 0 ? ["بيانات الأب أو الأم قيد التعديل (تُحفظ بـ Enter)"] : []
+      )
+    ) {
       return;
     }
 
@@ -273,6 +294,12 @@ export default function StudentDialog({
     setFieldError(null);
 
     try {
+      // From the summer view a child without a section would be saved
+      // outside the summer course, and not appear in that view.
+      if (isSummerYear(options.academicYear) && !enroll.classId) {
+        return showFieldError("classId", "يرجى اختيار شعبة الدورة الصيفية.");
+      }
+
       const { response, data } = await send("/api/students", "POST", {
         fields: Object.fromEntries(
           Object.entries(form).filter(([name, value]) => value !== "" && name !== "reviewNote")
@@ -506,6 +533,7 @@ export default function StudentDialog({
         event.preventDefault();
         requestClose();
       }}
+      {...closeOnBackdrop(requestClose)}
       style={{
         width: "min(860px, 96vw)",
         maxHeight: "94vh",
@@ -701,7 +729,7 @@ export default function StudentDialog({
                 relation={relation}
                 parent={student[key]}
                 onChanged={onFamilyChanged}
-                onEditingChange={onEditingChange}
+                onEditingChange={cellEditing}
               />
             </div>
           ))}

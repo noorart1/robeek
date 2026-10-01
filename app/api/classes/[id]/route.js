@@ -1,6 +1,7 @@
 
 import prisma from "../../../../lib/prisma";
 import { getCurrentUser } from "../../../../lib/auth";
+import { checkStaffId, setClassTeacher } from "../../../../lib/users";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +13,8 @@ function errorResponse(message, status, extra = {}) {
   );
 }
 
-// تعديل مرشدة الشعبة: PATCH { teacherName } (empty clears it).
+// تعديل مرشدة الشعبة: PATCH { staffId } — chosen from الكادر, null for
+// none (lib/users.js setClassTeacher).
 
 export async function PATCH(request, { params }) {
   try {
@@ -37,33 +39,21 @@ export async function PATCH(request, { params }) {
       return errorResponse("البيانات المرسلة غير صالحة.", 400);
     }
 
-    if (
-      !body ||
-      typeof body.teacherName !== "string" ||
-      body.teacherName.length > 100
-    ) {
-      return errorResponse("اسم المرشدة غير صالح.", 400, { field: "teacherName" });
-    }
+    const staff = await checkStaffId(prisma, body?.staffId ?? null);
 
-    const result = await prisma.class.updateMany({
-      where: { id: classId },
-      data: { teacherName: body.teacherName.trim() || null }
-    });
-
-    if (result.count === 0) {
-      return errorResponse("لم يتم العثور على الشعبة.", 404);
+    if (staff.error) {
+      return errorResponse(staff.error, 400, { field: staff.field });
     }
 
     return Response.json(
-      {
-        class: await prisma.class.findUnique({
-          where: { id: classId },
-          select: { id: true, name: true, shift: true, teacherName: true }
-        })
-      },
+      { class: await setClassTeacher(prisma, classId, staff.value) },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
+    if (error.code === "P2025") {
+      return errorResponse("لم يتم العثور على الشعبة.", 404);
+    }
+
     console.error("Class PATCH error:", error);
 
     return errorResponse("حدث خطأ أثناء حفظ اسم المرشدة.", 500);

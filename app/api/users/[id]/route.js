@@ -8,6 +8,7 @@ import {
   checkFullName,
   checkPassword,
   checkRole,
+  checkStaffId,
   errorResponse,
   loadUser,
   otherActiveAdmins,
@@ -18,7 +19,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // تعديل مستخدم:
-//   PATCH { fullName?, role?, isActive?, classIds?, password? }
+//   PATCH { fullName?, role?, isActive?, classIds?, password?, staffId? }
+// An account linked to الكادر (staffId) takes its name from there.
 // `password` is an admin reset; deactivating or resetting signs the user
 // out everywhere. Guards keep the school from locking itself out: no
 // self-deactivation or self-demotion, and never zero active admins.
@@ -90,6 +92,12 @@ export async function PATCH(request, { params }) {
       return errorResponse(classCheck.error, 400, { field: classCheck.field });
     }
 
+    const staffCheck = await checkStaffId(prisma, body.staffId);
+    if (staffCheck.error) {
+      return errorResponse(staffCheck.error, 400, { field: staffCheck.field });
+    }
+    if (staffCheck.value !== undefined) data.staffId = staffCheck.value;
+
     const result = await prisma.$transaction(async (tx) => {
       const target = await tx.user.findUnique({ where: { id: userId } });
 
@@ -108,6 +116,11 @@ export async function PATCH(request, { params }) {
         return { error: "LAST_ADMIN" };
       }
 
+      const staffId = data.staffId !== undefined ? data.staffId : target.staffId;
+      if (staffId) {
+        data.fullName = (await tx.staff.findUnique({ where: { id: staffId }, select: { name: true } })).name;
+      }
+
       await tx.user.update({
         where: { id: userId },
         data: { ...data, updatedAt: new Date() }
@@ -119,7 +132,7 @@ export async function PATCH(request, { params }) {
       if (role !== "TEACHER") {
         await assignClasses(tx, userId, fullName, []);
       } else if (classCheck.value !== undefined) {
-        await assignClasses(tx, userId, fullName, classCheck.value);
+        await assignClasses(tx, userId, fullName, classCheck.value, staffId);
       } else if (data.fullName) {
         // Renamed: the sections show the new name.
         await tx.class.updateMany({
@@ -153,6 +166,10 @@ export async function PATCH(request, { params }) {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
+    if (error.code === "P2002" && String(error.meta?.target).includes("staffId")) {
+      return errorResponse("هذا الموظف مرتبط بحساب آخر.", 409, { field: "staffId" });
+    }
+
     if (error.code === "NO_CLASS") {
       return errorResponse("إحدى الشعب المحددة غير موجودة.", 400, { field: "classIds" });
     }

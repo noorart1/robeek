@@ -3,7 +3,7 @@ import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
 import { toWesternDigits } from "../../../lib/digits";
 import { validateField } from "../../../lib/student-fields";
-import { validateEnrollment } from "../../../lib/enrollment-fields";
+import { defaultEnrollmentDate, validateEnrollment } from "../../../lib/enrollment-fields";
 import {
   formatStudent,
   loadStudent,
@@ -202,7 +202,7 @@ export async function POST(request) {
 
     const result = await prisma.$transaction(async (tx) => {
       const cls = enrollment
-        ? await tx.class.findUnique({ where: { id: enrollment.classId } })
+        ? await tx.class.findUnique({ where: { id: enrollment.classId }, include: { AcademicYear: { select: { name: true } } } })
         : null;
 
       if (enrollment && !cls) {
@@ -221,6 +221,7 @@ export async function POST(request) {
       if (cls) {
         await tx.enrollment.create({
           data: {
+            enrollmentDate: defaultEnrollmentDate(cls.AcademicYear.name, cls.shift),
             ...enrollment,
             studentId: student.id,
             academicYearId: cls.academicYearId

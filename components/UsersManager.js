@@ -46,18 +46,21 @@ export default function UsersManager() {
   const [users, setUsers] = useState([]);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [classes, setClasses] = useState([]);
+  const [staff, setStaff] = useState([]);
   const [editing, setEditing] = useState(null); // null | "new" | user id
   const [error, setError] = useState("");
 
   async function load() {
     try {
-      const [list, options] = await Promise.all([
+      const [list, options, people] = await Promise.all([
         send("/api/users", "GET"),
-        send("/api/options", "GET")
+        send("/api/options", "GET"),
+        send("/api/staff", "GET")
       ]);
       setUsers(list.users);
       setCurrentUserId(list.currentUserId);
       setClasses(options.classes);
+      setStaff(people.staff);
       setError("");
     } catch (err) {
       setError(err.message);
@@ -82,6 +85,7 @@ export default function UsersManager() {
       {editing === "new" ? (
         <UserForm
           classes={classes}
+          staff={staff}
           users={users}
           onCancel={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }}
@@ -114,6 +118,7 @@ export default function UsersManager() {
                       user={user}
                       self={user.id === currentUserId}
                       classes={classes}
+                      staff={staff}
                       users={users}
                       onCancel={() => setEditing(null)}
                       onSaved={() => { setEditing(null); load(); }}
@@ -150,7 +155,7 @@ export default function UsersManager() {
 }
 
 // Create (no `user`) or edit an account.
-function UserForm({ user, self = false, classes, users, onCancel, onSaved }) {
+function UserForm({ user, self = false, classes, staff, users, onCancel, onSaved }) {
   const isNew = !user;
 
   const [form, setForm] = useState({
@@ -159,6 +164,7 @@ function UserForm({ user, self = false, classes, users, onCancel, onSaved }) {
     role: user?.role ?? "TEACHER",
     isActive: user?.isActive ?? true,
     classIds: user?.classes.map((c) => c.id) ?? [],
+    staffId: user?.staffId ? String(user.staffId) : "",
     password: ""
   });
   const [busy, setBusy] = useState(false);
@@ -166,6 +172,20 @@ function UserForm({ user, self = false, classes, users, onCancel, onSaved }) {
   const [shownPassword, setShownPassword] = useState("");
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  // Linked to الكادر: her name comes from there, and the sections chosen
+  // for her on the dashboard are ticked.
+  function linkStaff(value) {
+    const person = staff.find((p) => String(p.id) === value);
+    setForm((f) => ({
+      ...f,
+      staffId: value,
+      fullName: person ? person.name : f.fullName,
+      classIds: person
+        ? [...new Set([...f.classIds, ...classes.filter((c) => c.staffId === person.id).map((c) => c.id)])]
+        : f.classIds
+    }));
+  }
 
   const toggleClass = (id) =>
     set("classIds", form.classIds.includes(id) ? form.classIds.filter((c) => c !== id) : [...form.classIds, id]);
@@ -184,10 +204,11 @@ function UserForm({ user, self = false, classes, users, onCancel, onSaved }) {
           username: form.username,
           password: form.password,
           role: form.role,
+          staffId: form.staffId || null,
           classIds: form.role === "TEACHER" ? form.classIds : []
         });
       } else {
-        const changes = { fullName: form.fullName, role: form.role, isActive: form.isActive };
+        const changes = { fullName: form.fullName, role: form.role, isActive: form.isActive, staffId: form.staffId || null };
         if (form.role === "TEACHER") changes.classIds = form.classIds;
         if (form.password) changes.password = form.password;
         await send(`/api/users/${user.id}`, "PATCH", changes);
@@ -218,8 +239,21 @@ function UserForm({ user, self = false, classes, users, onCancel, onSaved }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px" }}>
         <label style={label}>
-          الاسم الكامل
-          <input required autoFocus maxLength={100} value={form.fullName} onChange={(e) => set("fullName", e.target.value)} style={{ ...control, ...border("fullName") }} />
+          الموظف في «الكادر»
+          <select value={form.staffId} onChange={(e) => linkStaff(e.target.value)} style={{ ...control, ...border("staffId") }}>
+            <option value="">— غير مرتبط —</option>
+            {staff
+              .filter((p) => p.isActive || String(p.id) === form.staffId)
+              .filter((p) => String(p.id) === form.staffId || !users.some((u) => u.staffId === p.id))
+              .map((p) => (
+                <option key={p.id} value={p.id}>{p.name}{p.job ? ` (${p.job})` : ""}</option>
+              ))}
+          </select>
+        </label>
+
+        <label style={label}>
+          الاسم الكامل {form.staffId ? "(من الكادر)" : ""}
+          <input required autoFocus maxLength={100} disabled={!!form.staffId} value={form.fullName} onChange={(e) => set("fullName", e.target.value)} style={{ ...control, ...border("fullName") }} />
         </label>
 
         <label style={label}>

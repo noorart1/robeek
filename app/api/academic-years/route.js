@@ -2,7 +2,7 @@
 import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
 import { errorResponse, readBody } from "../../../lib/users";
-import { summerYearName, yearLabel } from "../../../lib/labels";
+import { summerYearName, upcomingSummerName } from "../../../lib/labels";
 import { activeAcademicYear } from "../../../lib/student-data";
 import { nextYearName } from "../../../lib/finance";
 import { backupNow } from "../../../lib/backup";
@@ -85,26 +85,26 @@ export async function POST(request) {
   }
 }
 
-// بدء الدورة الصيفية «صيف 2026» (May–August), between 1 April and 31
-// August of its year.
-// Copies the school year's sections with their teachers (evening ones too,
+// بدء الدورة الصيفية «صيف 2026» (May–August), any time: until August
+// this year's, from September next year's (upcomingSummerName), so
+// registration can open early. Copies the school year's sections with their teachers (evening ones too,
 // for when the summer has an evening shift) and becomes the active summer
 // course beside the school year. Nobody is enrolled automatically: each
 // child is registered for the summer with its own fee. The previous
 // summer course ends; what is still owed on it stays in «المتأخرون».
 async function startSummer() {
-  const today = iraqToday();
-  const name = summerYearName(today.slice(0, 4));
+  const name = upcomingSummerName(iraqToday());
 
-  if (today < `${today.slice(0, 4)}-04-01` || today >= `${today.slice(0, 4)}-09-01`) {
-    return errorResponse(`تبدأ ${yearLabel(name)} بين 1 نيسان و31 آب.`, 400);
-  }
   if (await prisma.academicYear.findUnique({ where: { name } })) {
     return errorResponse(`الدورة ${name} موجودة مسبقاً.`, 409);
   }
 
   const current = await activeAcademicYear();
   if (!current) return errorResponse("لا توجد سنة دراسية نشطة لنسخ شعبها.", 400);
+  // The summer belongs to the school year it ends (2026-2027 → «صيف 2027»).
+  if (name !== summerYearName(current.name.slice(5))) {
+    return errorResponse(`ابدأ السنة الدراسية ${nextYearName(current.name)} أولاً.`, 400);
+  }
 
   await backupNow("pre-summer");
 

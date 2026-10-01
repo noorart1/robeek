@@ -3,9 +3,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
+import { closeOnBackdrop, confirmDiscard } from "./dialog";
 import { formatDate } from "../lib/arabic";
 import { iraqToday } from "../lib/dates";
-import { PAYMENT_METHODS, SALARY_PAYMENT_TYPES, SHIFTS, formatMoney } from "../lib/labels";
+import { GENDERS, PAYMENT_METHODS, SALARY_PAYMENT_TYPES, SHIFTS, formatMoney } from "../lib/labels";
 import { CONTRACT_SUGGESTIONS, JOB_SUGGESTIONS } from "../lib/staff";
 
 export async function send(url, method, body) {
@@ -87,11 +88,11 @@ export default function StaffManager() {
             <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
               <th style={cell}>ت</th>
               <th style={cell}>الاسم</th>
+              <th style={cell}>الجنس</th>
               <th style={cell}>الوظيفة</th>
               <th style={cell}>الدوام</th>
               <th style={cell}>رقم الهاتف</th>
               <th style={money}>الراتب الاسمي</th>
-              <th style={money}>المكافآت</th>
               <th style={cell}>بداية العمل</th>
               <th style={cell}>العقد</th>
               <th style={cell}>الحالة</th>
@@ -111,11 +112,11 @@ export default function StaffManager() {
                       {person.name}
                     </button>
                   </td>
+                  <td style={cell}>{GENDERS[person.gender] || "—"}</td>
                   <td style={cell}>{person.job || "—"}</td>
                   <td style={cell}>{SHIFTS[person.shift] || "—"}</td>
                   <td style={cell} dir="ltr">{person.phone || "—"}</td>
                   <td style={money}>{person.baseSalary === null ? "—" : formatMoney(person.baseSalary)}</td>
-                  <td style={money}>{person.bonus === null ? "—" : formatMoney(person.bonus)}</td>
                   <td style={cell}>{formatDate(person.startDate) || "—"}</td>
                   <td style={cell}>{person.contract || "—"}</td>
                   <td style={cell}>{person.isActive ? "نشط" : "غير نشط"}</td>
@@ -130,9 +131,8 @@ export default function StaffManager() {
           </tbody>
           <tfoot>
             <tr style={{ fontWeight: "bold", backgroundColor: "#f8fafc" }}>
-              <td style={cell} colSpan={5}>المجموع (النشطون: {active.length})</td>
+              <td style={cell} colSpan={6}>المجموع (النشطون: {active.length})</td>
               <td style={money}>{formatMoney(total("baseSalary"))}</td>
-              <td style={money}>{formatMoney(total("bonus"))}</td>
               <td style={cell} colSpan={4} />
             </tr>
           </tfoot>
@@ -153,6 +153,14 @@ export function StaffDialog({ id, jobs, onClose, onChanged }) {
   const dialogRef = useRef(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  // The form's unsaved changes ([label, before, after]): ask before
+  // closing, as for a child.
+  const dirty = useRef([]);
+
+  function requestClose() {
+    if (dirty.current.length > 0 && !confirmDiscard(data ? `تعديل: ${data.staff.name}` : "", dirty.current)) return;
+    onClose();
+  }
 
   async function refresh() {
     try {
@@ -174,7 +182,8 @@ export function StaffDialog({ id, jobs, onClose, onChanged }) {
     <dialog
       ref={dialogRef}
       dir="rtl"
-      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      onCancel={(event) => { event.preventDefault(); requestClose(); }}
+      {...closeOnBackdrop(requestClose)}
       style={{ width: "min(960px, 96vw)", maxHeight: "94vh", padding: 0, border: "none", borderRadius: "14px", boxShadow: "0 20px 60px rgba(15, 23, 42, 0.3)" }}
     >
       <div style={{ padding: "18px 20px", backgroundColor: "#f8fafc" }}>
@@ -187,8 +196,9 @@ export function StaffDialog({ id, jobs, onClose, onChanged }) {
               key={data.staff.updatedAt}
               person={data.staff}
               jobs={jobs}
-              onCancel={onClose}
-              onSaved={changed}
+              onCancel={requestClose}
+              onDirtyChange={(value) => { dirty.current = value; }}
+              onSaved={() => { dirty.current = []; changed(); }}
               onDeleted={() => { onChanged(); onClose(); }}
             />
             <Salaries person={data.staff} salaries={data.salaries} payments={data.payments} onChanged={changed} />
@@ -196,7 +206,7 @@ export function StaffDialog({ id, jobs, onClose, onChanged }) {
           </>
         )}
 
-        <button type="button" onClick={onClose} style={{ marginTop: "14px", padding: "9px 20px", borderRadius: "8px" }}>
+        <button type="button" onClick={requestClose} style={{ marginTop: "14px", padding: "9px 20px", borderRadius: "8px" }}>
           إغلاق
         </button>
       </div>
@@ -209,14 +219,14 @@ const h3 = { color: "#1e40af", margin: "4px 0 8px", fontSize: "16px" };
 
 // الرواتب: like a child's الدفعات — totals, every receipt (voided ones
 // struck through), printing, and a form that records a payment at once.
-// A month is due الراتب الاسمي + المكافآت unless set otherwise under
+// A month is due الراتب الاسمي unless set otherwise under
 // المالية → الرواتب; a payment never exceeds what is left of it.
 function Salaries({ person, salaries, payments, onChanged }) {
   const thisMonth = iraqToday().slice(0, 7);
   const dueOf = (month) => {
     const salary = salaries.find((s) => s.month === month);
     if (salary) return salary.remaining;
-    return person.baseSalary === null ? null : person.baseSalary + (person.bonus || 0);
+    return person.baseSalary;
   };
   // A refund starts empty: how much comes back is not guessable.
   const blank = (month = thisMonth, paymentType = "SALARY") => ({
@@ -435,7 +445,7 @@ function Salaries({ person, salaries, payments, onChanged }) {
   );
 }
 
-// سجل تغيير الراتب: every change of الراتب الاسمي / المكافآت, newest first.
+// سجل تغيير الراتب: every change of الراتب الاسمي, newest first.
 function PayChanges({ changes }) {
   const amount = (value) => (value === null ? "—" : formatMoney(value));
   const pair = (from, to) => (from === to ? amount(to) : <>{amount(from)} → <strong>{amount(to)}</strong></>);
@@ -452,7 +462,6 @@ function PayChanges({ changes }) {
               <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
                 <th style={cell}>التاريخ</th>
                 <th style={cell}>الراتب الاسمي</th>
-                <th style={cell}>المكافآت</th>
                 <th style={cell}>بواسطة</th>
               </tr>
             </thead>
@@ -461,7 +470,6 @@ function PayChanges({ changes }) {
                 <tr key={c.id}>
                   <td style={cell}>{formatDate(iraqToday(new Date(c.createdAt)))}</td>
                   <td style={cell} dir="ltr">{pair(c.oldBaseSalary, c.newBaseSalary)}</td>
-                  <td style={cell} dir="ltr">{pair(c.oldBonus, c.newBonus)}</td>
                   <td style={cell}>{c.changedBy || "—"}</td>
                 </tr>
               ))}
@@ -475,27 +483,39 @@ function PayChanges({ changes }) {
 
 const FIELDS = [
   ["name", "الاسم", { required: true, autoFocus: true, maxLength: 191 }],
-  ["job", "الوظيفة", { list: "staff-jobs", maxLength: 191 }],
+  ["gender", "الجنس"],
+  ["job", "الوظيفة", { maxLength: 191, placeholder: "اكتب الوظيفة" }],
   ["shift", "أوقات الدوام"],
   ["phone", "رقم الهاتف", { dir: "ltr", inputMode: "tel", maxLength: 30 }],
   ["birthDate", "المواليد", { type: "date" }],
   ["address", "السكن", { maxLength: 500 }],
   ["education", "التحصيل الدراسي", { maxLength: 191 }],
   ["baseSalary", "الراتب الاسمي", { dir: "ltr", inputMode: "numeric" }],
-  ["bonus", "المكافآت", { dir: "ltr", inputMode: "numeric" }],
   ["startDate", "بداية العمل", { type: "date" }],
   ["contract", "العقد", { list: "staff-contract", maxLength: 191, placeholder: "نعم / لا أو تفاصيل" }]
 ];
 
-function StaffForm({ person, jobs, onCancel, onSaved, onDeleted = onSaved }) {
+function StaffForm({ person, jobs, onCancel, onSaved, onDeleted = onSaved, onDirtyChange }) {
   const isNew = !person;
-  const [form, setForm] = useState(() => {
-    const initial = { notes: person?.notes ?? "", isActive: person?.isActive ?? true };
-    for (const [field] of FIELDS) initial[field] = person?.[field] ?? "";
-    return initial;
+  const [initial] = useState(() => {
+    const values = { notes: person?.notes ?? "", isActive: person?.isActive ?? true };
+    for (const [field] of FIELDS) values[field] = person?.[field] ?? "";
+    return values;
   });
+  const [form, setForm] = useState(initial);
+  const labels = { ...Object.fromEntries(FIELDS.map(([field, text]) => [field, text])), notes: "ملاحظات شخصية", isActive: "الحالة" };
+  const shown = (key, value) =>
+    key === "shift" ? SHIFTS[value] : key === "gender" ? GENDERS[value] : key === "isActive" ? (value ? "نشط" : "غير نشط") : value;
+  const changes = Object.keys(initial)
+    .filter((key) => String(form[key] ?? "") !== String(initial[key] ?? ""))
+    .map((key) => [labels[key], shown(key, initial[key]), shown(key, form[key])]);
+  const changeKey = JSON.stringify(changes);
+  useEffect(() => { onDirtyChange?.(changes); }, [changeKey]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // الوظيفة: a list (a datalist hid every title but the one already
+  // typed), or free text for a new title.
+  const [newJob, setNewJob] = useState(false);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const border = (field) => (error?.field === field ? { borderColor: "#dc2626" } : undefined);
@@ -537,17 +557,26 @@ function StaffForm({ person, jobs, onCancel, onSaved, onDeleted = onSaved }) {
     >
       <strong style={{ color: "#1e40af" }}>{isNew ? "موظف جديد" : `تعديل: ${person.name}`}</strong>
 
-      <datalist id="staff-jobs">{jobs.map((j) => <option key={j} value={j} />)}</datalist>
       <datalist id="staff-contract">{CONTRACT_SUGGESTIONS.map((c) => <option key={c} value={c} />)}</datalist>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px" }}>
         {FIELDS.map(([field, text, props]) => (
           <label key={field} style={label}>
             {text}
-            {field === "shift" ? (
-              <select value={form.shift} onChange={(e) => set("shift", e.target.value)} style={{ ...control, ...border("shift") }}>
+            {field === "shift" || field === "gender" ? (
+              <select value={form[field]} onChange={(e) => set(field, e.target.value)} style={{ ...control, ...border(field) }}>
                 <option value="">—</option>
-                {Object.entries(SHIFTS).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+                {Object.entries(field === "shift" ? SHIFTS : GENDERS).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+              </select>
+            ) : field === "job" && !newJob ? (
+              <select
+                value={form.job}
+                onChange={(e) => (e.target.value === "__new" ? (setNewJob(true), set("job", "")) : set("job", e.target.value))}
+                style={{ ...control, ...border("job") }}
+              >
+                <option value="">—</option>
+                {jobs.map((j) => <option key={j} value={j}>{j}</option>)}
+                <option value={"__new"}>+ وظيفة أخرى…</option>
               </select>
             ) : (
               <input

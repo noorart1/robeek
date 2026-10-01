@@ -2,7 +2,7 @@
 import Link from "next/link";
 import prisma from "../../lib/prisma";
 import { requirePageUser } from "../../lib/auth";
-import { ATTENDANCE_STATUSES, SHIFTS, summerYearName, yearLabel } from "../../lib/labels";
+import { ATTENDANCE_STATUSES, SHIFTS, summerYearName, upcomingSummerName, yearLabel } from "../../lib/labels";
 import { iraqToday, isWeekend, parseDay } from "../../lib/dates";
 import { activeAcademicYear } from "../../lib/student-data";
 import AppHeader from "../../components/AppHeader";
@@ -23,20 +23,26 @@ export default async function DashboardPage() {
 
   const [year, summer] = await Promise.all([activeAcademicYear(), activeAcademicYear(prisma, "SUMMER")]);
   const today = iraqToday();
-  // بدء الدورة الصيفية: from April until the summer is over, once a year.
-  const summerName = summerYearName(today.slice(0, 4));
-  const canStartSummer =
-    year && summer?.name !== summerName && today >= `${today.slice(0, 4)}-04-01` && today < `${today.slice(0, 4)}-09-01`;
+  // بدء السنة الدراسية: always shown, usable from July of its first year
+  // (it ends the current year).
+  const nextYear = year && nextYearName(year.name);
+  const nextYearLocked = nextYear && today < `${nextYear.slice(0, 4)}-07-01` ? `يتاح من 1 تموز ${nextYear.slice(0, 4)}` : null;
+  // بدء الدورة الصيفية: any time, once per summer (from September, the
+  // next one), but only after the school year it ends has been started.
+  const summerName = upcomingSummerName(today);
+  const canStartSummer = year && summer?.name !== summerName;
+  const summerLocked = year && summerName !== summerYearName(year.name.slice(5)) ? `ابدأ السنة الدراسية ${nextYear} أولاً` : null;
 
   const sectionSelect = {
     id: true,
     name: true,
     shift: true,
     teacherName: true,
+    staffId: true,
     _count: { select: { Enrollment: { where: { Student: { status: "ACTIVE" } } } } }
   };
 
-  const [classes, summerClasses, activeStudents, needsReview, totalParents, todayRecords] =
+  const [classes, summerClasses, activeStudents, needsReview, totalParents, todayRecords, pastYears, staff] =
     await Promise.all([
       prisma.class.findMany({
         where: year ? { academicYearId: year.id } : undefined,
@@ -45,6 +51,7 @@ export default async function DashboardPage() {
           name: true,
           shift: true,
           teacherName: true,
+          staffId: true,
           _count: {
             select: {
               Enrollment: { where: { Student: { status: "ACTIVE" } } }
@@ -65,7 +72,24 @@ export default async function DashboardPage() {
           status: true,
           Student: { select: { Enrollment: { select: { classId: true } } } }
         }
-      })
+      }),
+      // Years that are over, newest first, with their sections' children
+      // (everyone enrolled then, whether still here or not).
+      prisma.academicYear.findMany({
+        where: { isActive: false },
+        select: {
+          id: true,
+          name: true,
+          Class: {
+            select: { id: true, name: true, shift: true, _count: { select: { Enrollment: true } } },
+            orderBy: [{ shift: "desc" }, { name: "asc" }]
+          }
+        },
+        orderBy: { id: "desc" }
+      }),
+      // المرشدة of a section is chosen from الكادر (active people, and
+      // anyone still heading a section).
+      prisma.staff.findMany({ where: { OR: [{ isActive: true }, { Class: { some: {} } }] }, select: { id: true, name: true, job: true }, orderBy: { name: "asc" } })
     ]);
 
   // Today's attendance per section: { classId: { PRESENT: n, ... } }.
@@ -101,8 +125,8 @@ export default async function DashboardPage() {
         {year && (
           <p style={{ color: "#64748b", marginTop: 0, display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
             <span>السنة الدراسية <span dir="ltr">{year.name}</span></span>
-            {nextYearName(year.name) && iraqToday() >= `${nextYearName(year.name).slice(0, 4)}-07-01` && <NewYearButton next={nextYearName(year.name)} current={year.name} />}
-            {canStartSummer && <NewYearButton current={year.name} summer={summerName} />}
+            {nextYear && <NewYearButton next={nextYear} current={year.name} locked={nextYearLocked} />}
+            {canStartSummer && <NewYearButton current={year.name} summer={summerName} locked={summerLocked} />}
           </p>
         )}
 
@@ -167,6 +191,8 @@ export default async function DashboardPage() {
                           <TeacherCell
                             classId={cls.id}
                             teacherName={cls.teacherName}
+                            staffId={cls.staffId}
+                            staff={staff}
                             sectionName={`${label} ${cls.name}`}
                           />
                         </td>
@@ -214,7 +240,7 @@ export default async function DashboardPage() {
                       </Link>
                     </td>
                     <td>
-                      <TeacherCell classId={cls.id} teacherName={cls.teacherName} sectionName={`الصيفية ${SHIFTS[cls.shift]} ${cls.name}`} />
+                      <TeacherCell classId={cls.id} teacherName={cls.teacherName} staffId={cls.staffId} staff={staff} sectionName={`الصيفية ${SHIFTS[cls.shift]} ${cls.name}`} />
                     </td>
                     {schoolDay && (
                       <td style={{ fontSize: "13px" }}>
@@ -232,6 +258,36 @@ export default async function DashboardPage() {
                     {summerClasses.reduce((sum, cls) => sum + cls._count.Enrollment, 0)}
                   </td>
                 </tr>
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {pastYears.length > 0 && (
+          <section style={{ ...card, marginTop: "18px", borderTop: "4px solid #475569" }}>
+            <h2 style={{ margin: "0 0 10px", fontSize: "18px", color: "#475569" }}>السنوات السابقة</h2>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                {pastYears.map((y) => (
+                  <tr key={y.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: "7px 0", whiteSpace: "nowrap" }}>
+                      <Link href={`/dashboard/students?year=${y.id}`} style={{ color: "#1e293b" }}>{yearLabel(y.name)}</Link>
+                    </td>
+                    <td style={{ fontSize: "13px" }}>
+                      {y.Class.filter((cls) => cls._count.Enrollment > 0).map((cls, i) => (
+                        <span key={cls.id}>
+                          {i > 0 && " · "}
+                          <Link href={`/dashboard/students?year=${y.id}&class=${cls.id}`} style={{ color: "#64748b" }}>
+                            {SHIFTS[cls.shift]} {cls.name}: {cls._count.Enrollment}
+                          </Link>
+                        </span>
+                      ))}
+                    </td>
+                    <td style={{ textAlign: "left", fontWeight: "bold" }}>
+                      {y.Class.reduce((sum, cls) => sum + cls._count.Enrollment, 0)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </section>

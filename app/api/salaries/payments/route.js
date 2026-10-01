@@ -23,7 +23,7 @@ async function nextReceiptNo(tx) {
 // دفعة راتب, like a child's payment: one of possibly several for the
 // month, never more than is left of it — or, as استرجاع (REFUND), money
 // the person gives back, never more than was paid. A month with no
-// salary set yet is due the person's الراتب الاسمي + المكافآت from الكادر.
+// salary set yet is due the person's الراتب الاسمي from الكادر.
 
 export async function POST(request) {
   try {
@@ -51,7 +51,7 @@ export async function POST(request) {
           throw Object.assign(new Error("حدّد الراتب الاسمي للموظف أولاً."), { status: 400, field: "amount" });
         }
         salary = await tx.salary.create({
-          data: { staffId, month, baseSalary: person.baseSalary, bonus: person.bonus ?? 0, updatedAt: new Date() },
+          data: { staffId, month, baseSalary: person.baseSalary, updatedAt: new Date() },
           include: { SalaryPayment: true }
         });
       }

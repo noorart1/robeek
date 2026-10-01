@@ -37,12 +37,15 @@ model Class {
   academicYearId Int
   teacherName    String?
   teacherUserId  Int?
+  staffId        Int?
   AcademicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
   Enrollment     Enrollment[]
   Teacher        User?        @relation(fields: [teacherUserId], references: [id])
+  Staff          Staff?       @relation(fields: [staffId], references: [id])
 
   @@index([academicYearId])
   @@index([teacherUserId])
+  @@index([staffId])
 }
 
 model Enrollment {
@@ -177,8 +180,10 @@ model User {
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime
+  staffId      Int?      @unique
   Session      Session[]
   Class        Class[]
+  Staff        Staff?    @relation(fields: [staffId], references: [id])
 }
 
 enum User_role {
@@ -192,6 +197,7 @@ enum User_role {
 model Staff {
   id         Int       @id @default(autoincrement())
   name       String
+  gender     String?   @db.VarChar(10)
   birthDate  DateTime? @db.Date
   address    String?   @db.VarChar(500)
   phone      String?   @db.VarChar(30)
@@ -208,6 +214,8 @@ model Staff {
   updatedAt  DateTime
   Salary     Salary[]
   StaffPayChange StaffPayChange[]
+  Class      Class[]
+  User       User?
 }
 
 // سجل تغيير الراتب: one row per change of Staff.baseSalary / bonus.

@@ -30,7 +30,7 @@ export async function GET() {
           // A teacher only sees the sections assigned to her.
           ...(teacher ? { teacherUserId: user.id } : {})
         },
-        select: { id: true, name: true, shift: true, teacherName: true, teacherUserId: true },
+        select: { id: true, name: true, shift: true, teacherName: true, teacherUserId: true, staffId: true },
         orderBy: [{ shift: "desc" }, { name: "asc" }]
       });
 
