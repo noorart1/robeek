@@ -1,7 +1,7 @@
 
 import bcrypt from "bcryptjs";
 import prisma from "../../../../lib/prisma";
-import { endOtherSessions, getCurrentUser } from "../../../../lib/auth";
+import { getCurrentUser, rotateSessions } from "../../../../lib/auth";
 import {
   checkLoginLimit,
   getClientIp,
@@ -98,7 +98,7 @@ export async function POST(request) {
       }
     });
 
-    const signedOut = await endOtherSessions(user.id);
+    const signedOut = await rotateSessions(user.id);
 
     return Response.json(
       { success: true, otherSessionsEnded: signedOut },
