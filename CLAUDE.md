@@ -136,8 +136,7 @@ node scripts/backup.js                 # fresh DB + photo backup first
 cp -a .next .next.rollback             # next build overwrites .next in place
 git pull --ff-only ~/robeek.bundle main && rm ~/robeek.bundle
 # new files in prisma/manual-migrations/? apply them, then:
-npx prisma generate
-npm run build
+npm run build                          # runs prisma generate first
 cloudlinux-selector restart --json --interpreter nodejs --app-root school-app
 ```
 
@@ -193,14 +192,14 @@ verified that way on 2026-09-25, including Arabic text and payment totals.
 The project does not use `prisma migrate`. Schema changes are hand-written
 SQL in `prisma/manual-migrations/` (tracked despite the `*.sql` ignore rule),
 applied once per database after a backup, with `schema.prisma` edited to
-match. **`npm run build` does not run `prisma generate`** — after pulling a
-schema change, run it explicitly, or the server keeps the old client and
-every new field fails at runtime:
+match. `npm run build` runs `prisma generate` before `next build`, so a
+build never serves an old client (before 2026-10-03 it did not, and every
+new field failed at runtime until someone ran it by hand). On Windows,
+stop `npm run dev` first: it locks the Prisma engine file.
 
 ```
 mysqldump <db> > ~/backups/before-<migration>.sql
 mysql <db> < prisma/manual-migrations/<file>.sql
-npx prisma generate
 npm run build
 ```
 

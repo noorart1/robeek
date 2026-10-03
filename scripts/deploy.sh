@@ -81,7 +81,7 @@ rollback() {
   exit 1
 }
 
-npx prisma generate >/dev/null || rollback
+# `npm run build` runs prisma generate first (package.json).
 npm run build || rollback
 
 errors=$(stat -c %s stderr.log)
