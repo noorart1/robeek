@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
 // cookie is only ever set and cleared by the server. It lasts for the
 // browser session: closing the browser goes back to the current year.
 export async function GET(request) {
+  // A prefetch (a Next.js <Link> scrolled into view) must not switch it.
+  if (request.headers.get("next-router-prefetch") || request.headers.get("purpose") === "prefetch") {
+    return new Response(null, { status: 204 });
+  }
+
   const user = await getCurrentUser();
   const url = new URL(request.url);
   const to = url.searchParams.get("to") || "";

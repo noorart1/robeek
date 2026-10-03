@@ -81,7 +81,8 @@ export default async function DashboardPage() {
       }),
       // The other school years, newest first, with their sections' children
       // (everyone enrolled then, whether still here or not). A link chooses
-      // the year (/dashboard/year).
+      // the year (/dashboard/year): plain <a>, never <Link>, whose prefetch
+      // would switch the year as soon as the link scrolls into view.
       prisma.academicYear.findMany({
         where: { kind: "REGULAR", id: { not: year?.id ?? -1 } },
         select: {
@@ -279,15 +280,15 @@ export default async function DashboardPage() {
                 {pastYears.map((y) => (
                   <tr key={y.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                     <td style={{ padding: "7px 0", whiteSpace: "nowrap" }}>
-                      <Link href={`/dashboard/year?id=${y.id}&to=/dashboard`} style={{ color: "#1e293b" }}>{yearLabel(y.name)}</Link>
+                      <a href={`/dashboard/year?id=${y.id}&to=/dashboard`} style={{ color: "#1e293b" }}>{yearLabel(y.name)}</a>
                     </td>
                     <td style={{ fontSize: "13px" }}>
                       {y.Class.filter((cls) => cls._count.Enrollment > 0).map((cls, i) => (
                         <span key={cls.id}>
                           {i > 0 && " · "}
-                          <Link href={`/dashboard/year?id=${y.id}&to=${encodeURIComponent(`/dashboard/students?class=${cls.id}`)}`} style={{ color: "#64748b" }}>
+                          <a href={`/dashboard/year?id=${y.id}&to=${encodeURIComponent(`/dashboard/students?class=${cls.id}`)}`} style={{ color: "#64748b" }}>
                             {SHIFTS[cls.shift]} {cls.name}: {cls._count.Enrollment}
-                          </Link>
+                          </a>
                         </span>
                       ))}
                     </td>
