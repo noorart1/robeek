@@ -66,6 +66,10 @@ const cell = {
 
 const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums" };
 
+// A white card with its title inside (the box tab).
+const panel = { backgroundColor: "#ffffff", borderRadius: "12px", padding: "16px 18px", border: "1px solid #e2e8f0" };
+const panelTitle = { fontSize: "18px", color: "#1e40af", margin: "0 0 10px" };
+
 function emptyTotals() {
   return { students: 0, fee: 0, paid: 0, curriculum: 0 };
 }
@@ -386,101 +390,123 @@ export default async function FinancePage({ searchParams }) {
         {tab === "box" && (<>
         <p style={{ color: "#64748b", marginTop: 0 }}>
           {range && <>من <span dir="ltr">{range.from}</span> إلى <span dir="ltr">{range.to}</span>. </>}
-          استحقاق كل شريك = صافي الربح × نسبته؛ والسحب ما سُجّل باسمه في «الحركات» («سحب البراق»…).
+          استحقاق كل شريك = صافي الربح × نسبته؛ والسحب ما سُجّل باسمه في «الحركات».
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "20px", alignItems: "start" }}>
-          <section>
-            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الإيرادات والأرباح</h2>
-            <div style={box}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <tbody>
-                  {[
-                    // الواصل: everything received from the parents, of
-                    // which tuition by نوع الدفع and curriculum/uniform.
-                    ["أقساط نقداً", income.cash, false, true],
-                    ["أقساط بطاقة", income.card, false, true],
-                    ...(income.unknown ? [["أقساط (نوع الدفع غير محدد)", income.unknown, false, true]] : []),
-                    ["المنهج والزي", income.curriculum, false, true],
-                    ["الواصل", received, true],
-                    ...(monthTotal("otherIncome") ? [["وارد آخر", monthTotal("otherIncome")]] : []),
-                    ...(income.refunds ? [["الاسترجاع", -income.refunds]] : []),
-                    ["إجمالي الإيرادات", totalIncome, true],
-                    ["الرواتب والمكافآت", -monthTotal("salaries")],
-                    ["المصروفات العامة", -monthTotal("expenses")],
-                    ["المصروفات الثابتة", -monthTotal("assets")],
-                    ["صافي الربح", net, true]
-                  ].map(([label, value, strong, part]) => (
-                    <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
-                      {/* A part of الواصل: indented and quieter. */}
-                      <td style={{ ...cell, whiteSpace: "normal", ...(part && { paddingInlineStart: "28px", color: "#64748b" }) }}>{label}</td>
-                      <td style={{ ...money, color: value < 0 ? "#b91c1c" : part ? "#64748b" : undefined }}>{formatMoney(value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
 
-          <section>
-            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الصندوق</h2>
-            <div style={box}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <tbody>
-                  {[
-                    ["صافي الربح", net],
-                    ["التسليم إلى الإدارة: النقدي والمنهج والزي (تلقائي)", manualHandovers - handovers],
-                    ...(manualHandovers ? [["التسليم إلى الإدارة: المسجل يدوياً سابقاً", -manualHandovers]] : []),
-                    ["صندوق المركز (صافي الربح − التسليم)", net - handovers, true],
-                    ["صندوق الإدارة (التسليم − سحب الشركاء)", handovers - withdrawals, true]
-                  ].map(([label, value, strong]) => (
-                    <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
-                      <td style={{ ...cell, whiteSpace: "normal" }}>{label}</td>
-                      <td style={{ ...money, color: value < 0 ? "#b91c1c" : undefined }}>{formatMoney(value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* The figures that matter, at a glance. */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "12px", marginBottom: "20px" }}>
+          {[
+            ["إجمالي الإيرادات", totalIncome, "#15803d"],
+            ["المصروفات", -(monthTotal("salaries") + monthTotal("expenses") + monthTotal("assets")), "#b91c1c"],
+            ["صافي الربح", net, "#1d4ed8", true],
+            ["صندوق المركز", net - handovers, "#0f766e"],
+            ["صندوق الإدارة", handovers - withdrawals, "#7c3aed"]
+          ].map(([label, value, color, main]) => (
+            <div key={label} style={{ ...panel, borderTop: `4px solid ${color}`, ...(main && { backgroundColor: "#eff6ff" }) }}>
+              <div style={{ color: "#64748b", fontSize: "14px" }}>{label}</div>
+              <div dir="ltr" style={{ fontSize: "24px", fontWeight: 700, color, textAlign: "right", fontVariantNumeric: "tabular-nums", marginTop: "4px" }}>
+                {formatMoney(value)}
+              </div>
             </div>
-          </section>
+          ))}
+        </div>
 
-          <section style={{ gridColumn: "1 / -1" }}>
-            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الحصص</h2>
-            <div style={box}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
-                    <th style={cell}>الشريك</th>
-                    <th style={money}>النسبة</th>
-                    <th style={money}>الاستحقاق من صافي الربح</th>
-                    <th style={money}>السحب</th>
-                    <th style={money}>الباقي</th>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: "20px", marginBottom: "20px" }}>
+          <section style={panel}>
+            <h2 style={panelTitle}>الإيرادات والأرباح</h2>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                {[
+                  // الواصل: everything received from the parents, of
+                  // which tuition by نوع الدفع and curriculum/uniform.
+                  ["أقساط نقداً", income.cash, false, true],
+                  ["أقساط بطاقة", income.card, false, true],
+                  ...(income.unknown ? [["أقساط (نوع الدفع غير محدد)", income.unknown, false, true]] : []),
+                  ["المنهج والزي", income.curriculum, false, true],
+                  ["الواصل", received, true],
+                  ...(monthTotal("otherIncome") ? [["وارد آخر", monthTotal("otherIncome")]] : []),
+                  ...(income.refunds ? [["الاسترجاع", -income.refunds]] : []),
+                  ["إجمالي الإيرادات", totalIncome, true],
+                  ["الرواتب والمكافآت", -monthTotal("salaries")],
+                  ["المصروفات العامة", -monthTotal("expenses")],
+                  ["المصروفات الثابتة", -monthTotal("assets")],
+                  ["صافي الربح", net, true]
+                ].map(([label, value, strong, part]) => (
+                  <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
+                    {/* A part of الواصل: indented and quieter. */}
+                    <td style={{ ...cell, whiteSpace: "normal", ...(part && { paddingInlineStart: "28px", color: "#64748b" }) }}>{label}</td>
+                    <td style={{ ...money, color: value < 0 ? "#b91c1c" : part ? "#64748b" : undefined }}>{formatMoney(value)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {partners.map((p) => (
-                    <tr key={p.name}>
-                      <td style={cell}>{p.name}</td>
-                      <td style={money}>{(p.share * 100).toLocaleString("en-US")}%</td>
-                      <td style={money}>{formatMoney(Math.round(p.due))}</td>
-                      <td style={money}>{formatMoney(p.taken)}</td>
-                      <td style={{ ...money, fontWeight: 600, color: p.left < 0 ? "#b91c1c" : "#15803d" }}>{formatMoney(Math.round(p.left))}</td>
-                    </tr>
-                  ))}
-                  {unassigned !== 0 && (
-                    <tr>
-                      <td style={{ ...cell, color: "#b45309" }} colSpan={3}>سحب لا يحمل اسم شريك</td>
-                      <td style={money}>{formatMoney(unassigned)}</td>
-                      <td style={cell} />
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          <section style={panel}>
+            <h2 style={panelTitle}>الصندوق</h2>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                {[
+                  ["صافي الربح", net],
+                  ["التسليم إلى الإدارة (تلقائي: النقدي والمنهج والزي)", manualHandovers - handovers],
+                  ...(manualHandovers ? [["التسليم إلى الإدارة (مسجل يدوياً سابقاً)", -manualHandovers]] : []),
+                  ["صندوق المركز", net - handovers, true],
+                  ["سحب الشركاء", -withdrawals],
+                  ["صندوق الإدارة", handovers - withdrawals, true]
+                ].map(([label, value, strong]) => (
+                  <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
+                    <td style={{ ...cell, whiteSpace: "normal" }}>{label}</td>
+                    <td style={{ ...money, color: value < 0 ? "#b91c1c" : undefined }}>{formatMoney(value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p style={{ color: "#64748b", fontSize: "13px", margin: "10px 0 0" }}>
+              صندوق المركز = صافي الربح − التسليم. صندوق الإدارة = التسليم − سحب الشركاء.
+            </p>
           </section>
         </div>
 
-        <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "8px" }}>الحركات</h2>
-        <ExpensesBoard kind="BOX" defaultMonth={defaultMonth} />
+        <section style={{ ...panel, marginBottom: "20px" }}>
+          <h2 style={panelTitle}>الحصص</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
+            {partners.map((p) => {
+              const used = p.due > 0 ? Math.min(100, Math.max(0, (p.taken / p.due) * 100)) : 0;
+              return (
+                <div key={p.name} style={{ border: "1px solid #e2e8f0", borderRadius: "10px", padding: "14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <strong style={{ fontSize: "17px", color: "#1e293b" }}>{p.name}</strong>
+                    <span style={{ color: "#64748b" }}>{(p.share * 100).toLocaleString("en-US")}%</span>
+                  </div>
+                  {/* How much of what is due has been drawn. */}
+                  <div style={{ height: "8px", backgroundColor: "#e2e8f0", borderRadius: "999px", margin: "10px 0", overflow: "hidden" }}>
+                    <div style={{ width: `${used}%`, height: "100%", backgroundColor: p.left < 0 ? "#dc2626" : "#2563eb" }} />
+                  </div>
+                  {[
+                    ["الاستحقاق", Math.round(p.due)],
+                    ["السحب", p.taken],
+                    ["الباقي", Math.round(p.left), p.left < 0 ? "#b91c1c" : "#15803d"]
+                  ].map(([label, value, color]) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontWeight: color ? 700 : 400 }}>
+                      <span style={{ color: "#475569" }}>{label}</span>
+                      <span style={{ color, fontVariantNumeric: "tabular-nums" }}>{formatMoney(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+          {unassigned !== 0 && (
+            <p style={{ color: "#b45309", margin: "12px 0 0" }}>
+              سحب لا يحمل اسم شريك: {formatMoney(unassigned)}
+            </p>
+          )}
+        </section>
+
+        <section style={panel}>
+          <h2 style={panelTitle}>الحركات</h2>
+          <ExpensesBoard kind="BOX" defaultMonth={defaultMonth} />
+        </section>
         </>)}
       </main>
     </>

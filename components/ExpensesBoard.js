@@ -270,7 +270,8 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
             </tbody>
             <tfoot>
               {/* Per category only where the tab has several (they are not one sum). */}
-              {kinds ? board.categories.map((category) => (
+              {/* Kinds no longer entered show only when they hold something. */}
+              {kinds ? board.categories.filter((c) => !board.legacy?.includes(c) || sum(c) !== 0).map((category) => (
                 <tr key={category} style={{ fontWeight: "bold", backgroundColor: "#f8fafc" }}>
                   <td style={cell} colSpan={4}>
                     {EXPENSE_CATEGORIES[category]}
