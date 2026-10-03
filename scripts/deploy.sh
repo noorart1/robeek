@@ -53,7 +53,7 @@ git bundle create "$bundle" "$old..main" 2>/dev/null
 scp -q -i "$key" "$bundle" "$target:robeek.bundle"
 rm -rf "$(dirname "$bundle")"
 
-remote "NODEVENV=$nodevenv bash -s" <<'REMOTE'
+remote "NODEVENV=$nodevenv URL=$url bash -s" <<'REMOTE'
 set -eo pipefail
 cd ~/school-app
 source "$NODEVENV/bin/activate"
@@ -87,6 +87,18 @@ npm run build || rollback
 errors=$(stat -c %s stderr.log)
 cloudlinux-selector restart --json --interpreter nodejs --app-root school-app >/dev/null
 sleep 10
+
+# The restart leaves the old lsnode processes running beside the new one;
+# piled up, their threads hit the account's process limit and the next
+# build fails with EAGAIN (CLAUDE.md, Deployment 7). Keep only the newest
+# (fewest seconds running) of this app's, after one request has made sure
+# the new one is up (when the public URL was given).
+[ -z "$URL" ] || curl -fsS -o /dev/null "$URL/login" || true
+old_nodes=$(ps -u "$USER" -o pid=,etimes=,args= | awk '$3 == "lsnode:" home "/school-app/" { print $2, $1 }' home="$HOME" | sort -n | tail -n +2 | cut -d' ' -f2)
+if [ -n "$old_nodes" ]; then
+  echo "Stopping old lsnode processes: $(echo $old_nodes)"
+  kill $old_nodes || true
+fi
 
 [ "$(cat .next/BUILD_ID)" != "$old_build" ] || { echo "BUILD_ID did not change." >&2; exit 1; }
 

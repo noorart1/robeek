@@ -99,7 +99,8 @@ a plain VPS. Things that trip people up (all learned on the 2026-09-25 deploy):
    days old, ~60 threads each). CloudLinux counts threads against the
    account's process limit, so `next build` then failed with
    `spawn … node EAGAIN`. After every restart, `ps -u $USER -o
-   pid,etime,args | grep lsnode` and kill all but the newest.
+   pid,etime,args | grep lsnode` and kill all but the newest
+   (`scripts/deploy.sh` does this itself).
 8. There is no `~/.my.cnf`: `mysql` needs the credentials from `.env`.
    Pass them in a temporary 0600 `--defaults-extra-file`, never with `-p`
    on the command line (other users on the host can see it in `ps`).
