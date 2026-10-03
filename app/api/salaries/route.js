@@ -1,6 +1,6 @@
 
 import prisma from "../../../lib/prisma";
-import { getCurrentUser } from "../../../lib/auth";
+import { requireAdmin } from "../../../lib/auth";
 import { errorResponse, readBody } from "../../../lib/users";
 import { checkSalary, formatSalary, formatStaff, isMonth, netSalary, payChange, salaryPaid } from "../../../lib/staff";
 import { formatExpense } from "../../../lib/finance";
@@ -16,8 +16,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const month = new URL(request.url).searchParams.get("month");
     if (!isMonth(month)) return errorResponse("الشهر غير صالح.", 400);
@@ -49,8 +49,8 @@ export async function GET(request) {
 
 export async function PUT(request) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const body = await readBody(request);
     if (!body) return errorResponse("البيانات المرسلة غير صالحة.", 400);

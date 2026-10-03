@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { getCurrentUser } from "../../../lib/auth";
+import { requireAdmin } from "../../../lib/auth";
 import { errorResponse } from "../../../lib/users";
 import { backupNow, listBackups, saveUpload } from "../../../lib/backup";
 
@@ -11,11 +11,6 @@ export const dynamic = "force-dynamic";
 
 const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
-async function isAdmin() {
-  const user = await getCurrentUser();
-  return Boolean(user && user.role === "ADMIN");
-}
-
 function list(extra = {}) {
   return Response.json(
     { backups: listBackups(), ...extra },
@@ -25,7 +20,8 @@ function list(extra = {}) {
 
 export async function GET() {
   try {
-    if (!(await isAdmin())) return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     return list();
   } catch (error) {
@@ -36,7 +32,8 @@ export async function GET() {
 
 export async function POST() {
   try {
-    if (!(await isAdmin())) return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     const made = await backupNow("manual");
     return list({ made });
@@ -52,7 +49,8 @@ export async function POST() {
 
 export async function PUT(request) {
   try {
-    if (!(await isAdmin())) return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     if (!request.body) return errorResponse("لم يتم اختيار ملف.", 400);
 

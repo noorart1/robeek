@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { getCurrentUser } from "../../../../lib/auth";
+import { requireAdmin } from "../../../../lib/auth";
 import { validateField } from "../../../../lib/student-fields";
 import { loadStudent } from "../../../../lib/student-data";
 import { deletePhoto } from "../../../../lib/photos";
@@ -32,14 +32,8 @@ export async function PATCH(request, { params }) {
 
     // بررسی نشست مدیر
 
-    const user = await getCurrentUser();
-
-    if (!user || user.role !== "ADMIN") {
-      return errorResponse(
-        "ليس لديك صلاحية الوصول.",
-        401
-      );
-    }
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     // بررسی شناسه کودک
 
@@ -218,11 +212,8 @@ export async function PATCH(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const user = await getCurrentUser();
-
-    if (!user || user.role !== "ADMIN") {
-      return errorResponse("ليس لديك صلاحية الوصول.", 401);
-    }
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const { id } = await params;
     const studentId = Number(id);

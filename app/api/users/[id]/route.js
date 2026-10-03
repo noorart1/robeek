@@ -1,7 +1,7 @@
 
 import bcrypt from "bcryptjs";
 import prisma from "../../../../lib/prisma";
-import { getCurrentUser } from "../../../../lib/auth";
+import { requireAdmin } from "../../../../lib/auth";
 import {
   assignClasses,
   checkClassIds,
@@ -27,11 +27,8 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(request, { params }) {
   try {
-    const admin = await getCurrentUser();
-
-    if (!admin || admin.role !== "ADMIN") {
-      return errorResponse("ليس لديك صلاحية الوصول.", 401);
-    }
+    const { user: admin, response } = await requireAdmin();
+    if (response) return response;
 
     const { id } = await params;
     const userId = Number(id);

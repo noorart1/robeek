@@ -1,7 +1,7 @@
 
 import bcrypt from "bcryptjs";
 import prisma from "../../../lib/prisma";
-import { getCurrentUser } from "../../../lib/auth";
+import { requireAdmin } from "../../../lib/auth";
 import {
   assignClasses,
   checkClassIds,
@@ -24,11 +24,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const user = await getCurrentUser();
-
-    if (!user || user.role !== "ADMIN") {
-      return errorResponse("ليس لديك صلاحية الوصول.", 401);
-    }
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const users = await prisma.user.findMany({
       select: userSelect,
@@ -52,11 +49,8 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const user = await getCurrentUser();
-
-    if (!user || user.role !== "ADMIN") {
-      return errorResponse("ليس لديك صلاحية الوصول.", 401);
-    }
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const body = await readBody(request);
 

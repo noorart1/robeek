@@ -264,7 +264,9 @@ Two roles can sign in (`ROLE_HOME` in `lib/auth.js`):
   attendance responses carry no photo for her.
 
 Server pages call `requirePageUser([...roles])`, which redirects other
-roles to their own start page. Every API route checks the role itself;
+roles to their own start page. Every API route checks the role itself —
+admin-only routes with `const { user, response } = await requireAdmin();
+if (response) return response;` (`lib/auth.js`);
 `/api/attendance` and `/api/options` additionally scope a teacher to her
 sections. When adding a route, decide its roles explicitly — the default
 in this codebase is ADMIN only. Accounts are managed at

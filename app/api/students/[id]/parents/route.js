@@ -1,5 +1,5 @@
 import prisma from "../../../../../lib/prisma";
-import { getCurrentUser } from "../../../../../lib/auth";
+import { requireAdmin } from "../../../../../lib/auth";
 import { toWesternDigits } from "../../../../../lib/digits";
 
 export const runtime = "nodejs";
@@ -27,12 +27,6 @@ function errorResponse(message, status) {
   );
 }
 
-async function checkAdmin() {
-  const user = await getCurrentUser();
-
-  return user && user.role === "ADMIN";
-}
-
 async function getStudentId(params) {
   const { id } = await params;
   const studentId = Number(id);
@@ -51,12 +45,8 @@ async function getStudentId(params) {
 
 export async function GET(request, { params }) {
   try {
-    if (!(await checkAdmin())) {
-      return errorResponse(
-        "ليس لديك صلاحية الوصول.",
-        401
-      );
-    }
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     const studentId = await getStudentId(params);
 
@@ -113,12 +103,8 @@ export async function GET(request, { params }) {
 
 export async function POST(request, { params }) {
   try {
-    if (!(await checkAdmin())) {
-      return errorResponse(
-        "ليس لديك صلاحية الوصول.",
-        401
-      );
-    }
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     const studentId = await getStudentId(params);
 
@@ -351,12 +337,8 @@ export async function POST(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    if (!(await checkAdmin())) {
-      return errorResponse(
-        "ليس لديك صلاحية الوصول.",
-        401
-      );
-    }
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     const studentId = await getStudentId(params);
 

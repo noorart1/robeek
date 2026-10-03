@@ -1,5 +1,5 @@
 import prisma from "../../../../lib/prisma";
-import { getCurrentUser } from "../../../../lib/auth";
+import { requireAdmin } from "../../../../lib/auth";
 import { errorResponse, readBody } from "../../../../lib/users";
 import { fullName } from "../../../../lib/labels";
 import { activeAcademicYear } from "../../../../lib/student-data";
@@ -31,8 +31,8 @@ const sectionKey = (cls) => `${cls.shift}-${cls.name}`;
 
 export async function GET() {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const { from, to } = await years();
     if (!from) return Response.json({ from: null }, { headers: { "Cache-Control": "no-store" } });
@@ -82,8 +82,8 @@ const ids = (value) => (Array.isArray(value) ? value.filter((id) => Number.isSaf
 
 export async function POST(request) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const body = await readBody(request);
     if (!body || typeof body !== "object") return errorResponse("البيانات المرسلة غير صالحة.", 400);

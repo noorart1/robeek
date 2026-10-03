@@ -1,5 +1,5 @@
 import prisma from "../../../../lib/prisma";
-import { getCurrentUser } from "../../../../lib/auth";
+import { requireAdmin } from "../../../../lib/auth";
 import { toWesternDigits } from "../../../../lib/digits";
 
 export const runtime = "nodejs";
@@ -40,14 +40,8 @@ const parentSelect = {
 
 export async function PATCH(request, { params }) {
   try {
-    const user = await getCurrentUser();
-
-    if (!user || user.role !== "ADMIN") {
-      return errorResponse(
-        "ليس لديك صلاحية الوصول.",
-        401
-      );
-    }
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const { id } = await params;
     const parentId = Number(id);

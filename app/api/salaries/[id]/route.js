@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { getCurrentUser } from "../../../../lib/auth";
+import { requireAdmin } from "../../../../lib/auth";
 import { errorResponse } from "../../../../lib/users";
 
 export const runtime = "nodejs";
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(request, { params }) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const id = Number((await params).id);
     if (!Number.isSafeInteger(id) || id <= 0) return errorResponse("معرّف الراتب غير صالح.", 400);

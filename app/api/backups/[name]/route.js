@@ -1,22 +1,16 @@
 import fs from "node:fs";
 import { Readable } from "node:stream";
-import { getCurrentUser } from "../../../../lib/auth";
+import { requireAdmin } from "../../../../lib/auth";
 import { errorResponse } from "../../../../lib/users";
 import { backupPath, isBackupName, listBackups, restore } from "../../../../lib/backup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// One backup file: download it (GET) or restore it (POST). Admins only.
-
-async function isAdmin() {
-  const user = await getCurrentUser();
-  return Boolean(user && user.role === "ADMIN");
-}
-
 export async function GET(request, { params }) {
   try {
-    if (!(await isAdmin())) return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     const { name } = await params;
 
@@ -42,7 +36,8 @@ export async function GET(request, { params }) {
 
 export async function POST(request, { params }) {
   try {
-    if (!(await isAdmin())) return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     const { name } = await params;
 

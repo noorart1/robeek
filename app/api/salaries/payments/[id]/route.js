@@ -1,6 +1,6 @@
 
 import prisma from "../../../../../lib/prisma";
-import { getCurrentUser } from "../../../../../lib/auth";
+import { requireAdmin } from "../../../../../lib/auth";
 import { errorResponse, readBody } from "../../../../../lib/users";
 import { salaryPaid } from "../../../../../lib/staff";
 
@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(request, { params }) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const id = Number((await params).id);
     if (!Number.isSafeInteger(id) || id <= 0) return errorResponse("معرّف الدفعة غير صالح.", 400);

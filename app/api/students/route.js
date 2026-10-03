@@ -1,6 +1,6 @@
 
 import prisma from "../../../lib/prisma";
-import { getCurrentUser } from "../../../lib/auth";
+import { requireAdmin } from "../../../lib/auth";
 import { toWesternDigits } from "../../../lib/digits";
 import { validateField } from "../../../lib/student-fields";
 import { defaultEnrollmentDate, validateEnrollment } from "../../../lib/enrollment-fields";
@@ -16,17 +16,6 @@ export const dynamic = "force-dynamic";
 
 const SHIFT_LETTER = { MORNING: "M", EVENING: "E" };
 
-// بررسی دسترسی مدیر
-
-async function checkAdmin() {
-  const user = await getCurrentUser();
-
-  return Boolean(
-    user &&
-    user.role === "ADMIN"
-  );
-}
-
 function jsonError(message, status, extra = {}) {
   return Response.json(
     { error: message, ...extra },
@@ -39,9 +28,8 @@ function jsonError(message, status, extra = {}) {
 export async function GET() {
   try {
 
-    if (!(await checkAdmin())) {
-      return jsonError("ليس لديك صلاحية الوصول.", 401);
-    }
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     const [students, view] = await Promise.all([
       prisma.student.findMany({ select: studentSelect, orderBy: { id: "asc" } }),
@@ -129,9 +117,8 @@ async function findOrCreateParent(tx, relation, phone, data) {
 export async function POST(request) {
   try {
 
-    if (!(await checkAdmin())) {
-      return jsonError("ليس لديك صلاحية الوصول.", 401);
-    }
+    const { response } = await requireAdmin();
+    if (response) return response;
 
     let body;
 

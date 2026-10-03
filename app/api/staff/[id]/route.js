@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { getCurrentUser } from "../../../../lib/auth";
+import { requireAdmin } from "../../../../lib/auth";
 import { errorResponse, readBody, renameStaff } from "../../../../lib/users";
 import { checkStaff, formatSalary, formatSalaryPayment, formatStaff, netSalary, payChange, salaryPaid } from "../../../../lib/staff";
 import { iraqToday } from "../../../../lib/dates";
@@ -19,8 +19,8 @@ async function staffId(params) {
 
 export async function GET(request, { params }) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const id = await staffId(params);
     if (!id) return errorResponse("معرّف الموظف غير صالح.", 400);
@@ -60,8 +60,8 @@ export async function GET(request, { params }) {
 
 export async function PATCH(request, { params }) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const id = await staffId(params);
     if (!id) return errorResponse("معرّف الموظف غير صالح.", 400);
@@ -116,8 +116,8 @@ export async function PATCH(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const id = await staffId(params);
     if (!id) return errorResponse("معرّف الموظف غير صالح.", 400);

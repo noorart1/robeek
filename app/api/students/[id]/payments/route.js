@@ -1,6 +1,6 @@
 
 import prisma from "../../../../../lib/prisma";
-import { getCurrentUser } from "../../../../../lib/auth";
+import { requireAdmin } from "../../../../../lib/auth";
 import { parseAmount } from "../../../../../lib/digits";
 import { PAYMENT_METHODS, PAYMENT_TYPES } from "../../../../../lib/labels";
 import { loadStudent } from "../../../../../lib/student-data";
@@ -38,11 +38,8 @@ async function nextReceiptNo(tx, yearName) {
 
 export async function POST(request, { params }) {
   try {
-    const user = await getCurrentUser();
-
-    if (!user || user.role !== "ADMIN") {
-      return errorResponse("ليس لديك صلاحية الوصول.", 401);
-    }
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const { id } = await params;
     const studentId = Number(id);

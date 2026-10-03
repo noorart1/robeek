@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { getCurrentUser } from "../../../../lib/auth";
+import { requireAdmin } from "../../../../lib/auth";
 import { errorResponse, readBody } from "../../../../lib/users";
 import { iraqToday, parseDay } from "../../../../lib/dates";
 import { checkSalaryPayment, formatSalaryPayment, netSalary, salaryPaid } from "../../../../lib/staff";
@@ -27,8 +27,8 @@ async function nextReceiptNo(tx) {
 
 export async function POST(request) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const body = await readBody(request);
     if (!body) return errorResponse("البيانات المرسلة غير صالحة.", 400);

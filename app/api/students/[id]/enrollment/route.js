@@ -1,6 +1,6 @@
 
 import prisma from "../../../../../lib/prisma";
-import { getCurrentUser } from "../../../../../lib/auth";
+import { requireAdmin } from "../../../../../lib/auth";
 import { defaultEnrollmentDate, validateEnrollment } from "../../../../../lib/enrollment-fields";
 import { loadStudent } from "../../../../../lib/student-data";
 
@@ -19,11 +19,8 @@ function errorResponse(message, status, extra = {}) {
 
 export async function PUT(request, { params }) {
   try {
-    const user = await getCurrentUser();
-
-    if (!user || user.role !== "ADMIN") {
-      return errorResponse("ليس لديك صلاحية الوصول.", 401);
-    }
+    const { user, response } = await requireAdmin();
+    if (response) return response;
 
     const { id } = await params;
     const studentId = Number(id);
