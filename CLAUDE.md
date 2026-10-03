@@ -156,6 +156,9 @@ meant to run nightly from a cPanel cron job; the exact line is in the
 script's header. The DB password reaches mysqldump through a temporary 0600
 option file, never argv.
 
+A second nightly cron job, `scripts/cleanup-sessions.js`, drops expired
+login sessions (the line is in its header; it logs to the same file).
+
 Check it occasionally: `tail ~/backups/school-app/backup.log` must show a
 `database →` line for every night, and never `BACKUP FAILED`.
 
