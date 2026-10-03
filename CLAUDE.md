@@ -168,14 +168,19 @@ server) and restore it. Every restore first saves the current state as a
 `-pre-restore` backup. Uploads are named by content, never by the
 uploader's file name; photo archives may only hold `students/<photo>.jpg`
 entries; SQL is piped into `mysql --sandbox`, which refuses `\!` and other
-client commands. Restoring the database also restores its `Session` and
-`Sequence` tables: users may be signed out, and receipt numbers issued
-after the backup will be issued again.
+client commands. Restoring the database also restores its `Session`
+table (users may be signed out), but never the receipt counters
+(`Sequence`): they are read before the restore and put back to the higher
+value after it (`keepCounters` in `lib/backup.js`), so receipts numbered
+after the backup never get their numbers again.
 
-Restore by hand (take a fresh backup of the current state first):
+Restore by hand (take a fresh backup of the current state first, and note
+the counters, which the dump would set back):
 
 ```
+mysql <db> -e "SELECT name, value FROM Sequence"     # note these
 gunzip -c ~/backups/school-app/db-<date>.sql.gz | mysql <db>
+mysql <db> -e "UPDATE Sequence SET value = GREATEST(value, <noted>) WHERE name = '<name>'"   # each
 tar -xzf ~/backups/school-app/photos-<date>.tar.gz -C ~/school-app/uploads/
 ```
 
