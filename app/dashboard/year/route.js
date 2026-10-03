@@ -16,7 +16,9 @@ export async function GET(request) {
   const to = url.searchParams.get("to") || "";
   // Only pages of this app: never an open redirect.
   const target = /^\/dashboard(\/|\?|$)/.test(to) ? to : "/dashboard";
-  const response = NextResponse.redirect(new URL(target, url));
+  // A relative Location: behind Passenger request.url is the app's own
+  // http://localhost:3000, not the public address.
+  const response = new NextResponse(null, { status: 303, headers: { Location: target } });
 
   if (user?.role !== "ADMIN") return response;
 
