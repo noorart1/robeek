@@ -109,6 +109,10 @@ a plain VPS. Things that trip people up (all learned on the 2026-09-25 deploy):
 8. There is no `~/.my.cnf`: `mysql` needs the credentials from `.env`.
    Pass them in a temporary 0600 `--defaults-extra-file`, never with `-p`
    on the command line (other users on the host can see it in `ps`).
+9. **Never pipe `crontab -l` into `crontab -`** (2026-10-03: it wiped the
+   whole crontab, WordPress's and Laravel's jobs included). Save
+   `crontab -l` to a file, edit a copy, install it with `crontab <file>`,
+   and check `crontab -l` afterwards.
 
 The same cPanel account also serves a WordPress site and a Laravel app (their
 cron jobs share the crontab). Only touch this app's own directory, and never
