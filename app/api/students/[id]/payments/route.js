@@ -5,6 +5,7 @@ import { parseAmount } from "../../../../../lib/digits";
 import { PAYMENT_METHODS, PAYMENT_TYPES } from "../../../../../lib/labels";
 import { loadStudent } from "../../../../../lib/student-data";
 import { REFUND_TYPES, paidTotals } from "../../../../../lib/finance";
+import { nextSequence } from "../../../../../lib/sequence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,20 +19,14 @@ function errorResponse(message, status, extra = {}) {
 
 // Receipt numbers per academic year: "2025-2026" → 2526-0001, 2526-0002…,
 // a summer course "صيف 2026" → SU26-0001. From the Sequence table,
-// incremented inside the payment's transaction, so a number is never given
-// twice — not even after its payment is gone.
+// incremented inside the payment's transaction (lib/sequence.js), so a
+// number is never given twice — not even after its payment is gone.
 async function nextReceiptNo(tx, yearName) {
   const match = /^\d{2}(\d{2})\s*-\s*\d{2}(\d{2})$/.exec(yearName || "");
   const summer = /^صيف \d{2}(\d{2})$/.exec(yearName || "");
   const prefix = match ? `${match[1]}${match[2]}` : summer ? `SU${summer[1]}` : "R";
 
-  const counter = await tx.sequence.upsert({
-    where: { name: `receipt-${prefix}` },
-    create: { name: `receipt-${prefix}`, value: 1 },
-    update: { value: { increment: 1 } }
-  });
-
-  return `${prefix}-${String(counter.value).padStart(4, "0")}`;
+  return `${prefix}-${String(await nextSequence(tx, `receipt-${prefix}`)).padStart(4, "0")}`;
 }
 
 // تسجيل دفعة: a payment against the child's current enrollment.

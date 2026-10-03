@@ -4,19 +4,15 @@ import { requireAdmin } from "../../../../lib/auth";
 import { errorResponse, readBody } from "../../../../lib/users";
 import { iraqToday, parseDay } from "../../../../lib/dates";
 import { checkSalaryPayment, formatSalaryPayment, netSalary, salaryPaid } from "../../../../lib/staff";
+import { nextSequence } from "../../../../lib/sequence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Salary receipts: S-0001, S-0002… from the Sequence table, inside the
-// payment's transaction, so a number is never given twice.
+// payment's transaction, so a number is never given twice (lib/sequence.js).
 async function nextReceiptNo(tx) {
-  const counter = await tx.sequence.upsert({
-    where: { name: "salary-receipt" },
-    create: { name: "salary-receipt", value: 1 },
-    update: { value: { increment: 1 } }
-  });
-  return `S-${String(counter.value).padStart(4, "0")}`;
+  return `S-${String(await nextSequence(tx, "salary-receipt")).padStart(4, "0")}`;
 }
 
 //   POST { staffId, month, amount, paymentType?, paidOn?, paymentMethod?, description? }
