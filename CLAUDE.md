@@ -54,6 +54,11 @@ npm.cmd test
 & "C:\Program Files\Git\bin\bash.exe" scripts/local.sh sync <user>@<host>   # refresh data (online)
 ```
 
+`npm test` includes `test/routes.test.mjs`, which calls the payment and
+salary route handlers against the local database (with MariaDB running;
+it cleans up after itself, receipt counters included). Against any
+database but `school_dev` on 127.0.0.1 it skips itself.
+
 PowerShell has no `bash` on its PATH, and blocks `npm` (the `npm.ps1`
 shim) under the default execution policy; `npm.cmd` avoids that, as does
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once. In Git Bash:
