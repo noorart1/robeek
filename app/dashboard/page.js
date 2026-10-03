@@ -4,7 +4,7 @@ import prisma from "../../lib/prisma";
 import { requirePageUser } from "../../lib/auth";
 import { ATTENDANCE_STATUSES, SHIFTS, summerYearName, upcomingSummerName, yearLabel } from "../../lib/labels";
 import { iraqToday, isWeekend, parseDay } from "../../lib/dates";
-import { activeAcademicYear } from "../../lib/student-data";
+import { yearView } from "../../lib/year-view";
 import AppHeader from "../../components/AppHeader";
 import TeacherCell from "../../components/TeacherCell";
 import NewYearButton from "../../components/NewYearButton";
@@ -21,25 +21,30 @@ const card = {
 export default async function DashboardPage() {
   const user = await requirePageUser(["ADMIN"]);
 
-  const [year, summer] = await Promise.all([activeAcademicYear(), activeAcademicYear(prisma, "SUMMER")]);
+  // The year chosen in the header (lib/year-view.js), the active one by default.
+  const { year, summer, isActive } = await yearView();
   const today = iraqToday();
-  // بدء السنة الدراسية: always shown, usable from July of its first year
-  // (it ends the current year).
-  const nextYear = year && nextYearName(year.name);
+  // بدء السنة الدراسية: shown with the active year, usable from July of its
+  // first year (it ends the current year).
+  const nextYear = isActive && year && nextYearName(year.name);
   const nextYearLocked = nextYear && today < `${nextYear.slice(0, 4)}-07-01` ? `يتاح من 1 تموز ${nextYear.slice(0, 4)}` : null;
   // بدء الدورة الصيفية: any time, once per summer (from September, the
   // next one), but only after the school year it ends has been started.
   const summerName = upcomingSummerName(today);
-  const canStartSummer = year && summer?.name !== summerName;
+  const canStartSummer = isActive && year && summer?.name !== summerName;
   const summerLocked = year && summerName !== summerYearName(year.name.slice(5)) ? `ابدأ السنة الدراسية ${nextYear} أولاً` : null;
 
+  // The running year counts the children here now; an earlier one, everyone
+  // who was enrolled then.
+  const here = isActive ? { Student: { status: "ACTIVE" } } : {};
+  const inYear = isActive ? { status: "ACTIVE" } : { Enrollment: { some: { academicYearId: year?.id ?? -1 } } };
   const sectionSelect = {
     id: true,
     name: true,
     shift: true,
     teacherName: true,
     staffId: true,
-    _count: { select: { Enrollment: { where: { Student: { status: "ACTIVE" } } } } }
+    _count: { select: { Enrollment: { where: here } } }
   };
 
   const [classes, summerClasses, activeStudents, needsReview, totalParents, todayRecords, pastYears, staff] =
@@ -54,7 +59,7 @@ export default async function DashboardPage() {
           staffId: true,
           _count: {
             select: {
-              Enrollment: { where: { Student: { status: "ACTIVE" } } }
+              Enrollment: { where: here }
             }
           }
         },
@@ -63,9 +68,10 @@ export default async function DashboardPage() {
       summer
         ? prisma.class.findMany({ where: { academicYearId: summer.id }, select: sectionSelect, orderBy: [{ shift: "desc" }, { name: "asc" }] })
         : [],
-      prisma.student.count({ where: { status: "ACTIVE" } }),
-      prisma.student.count({ where: { reviewNote: { not: null } } }),
-      prisma.parent.count(),
+      prisma.student.count({ where: inYear }),
+      prisma.student.count({ where: { ...inYear, reviewNote: { not: null } } }),
+      // Parents of this year's children; the others stay with earlier years.
+      prisma.parent.count({ where: { StudentParent: { some: { Student: inYear } } } }),
       prisma.attendance.findMany({
         where: { date: parseDay(today), Student: { status: "ACTIVE" } },
         select: {
@@ -73,10 +79,11 @@ export default async function DashboardPage() {
           Student: { select: { Enrollment: { select: { classId: true } } } }
         }
       }),
-      // Years that are over, newest first, with their sections' children
-      // (everyone enrolled then, whether still here or not).
+      // The other school years, newest first, with their sections' children
+      // (everyone enrolled then, whether still here or not). A link chooses
+      // the year (/dashboard/year).
       prisma.academicYear.findMany({
-        where: { isActive: false },
+        where: { kind: "REGULAR", id: { not: year?.id ?? -1 } },
         select: {
           id: true,
           name: true,
@@ -103,7 +110,7 @@ export default async function DashboardPage() {
   const schoolDay = !isWeekend(today);
 
   const stats = [
-    ["الأطفال النشطون", activeStudents],
+    [isActive ? "الأطفال النشطون" : "أطفال السنة", activeStudents],
     ["أولياء الأمور", totalParents],
     ["بحاجة إلى مراجعة", needsReview, "/dashboard/students?review=1"]
   ];
@@ -127,6 +134,7 @@ export default async function DashboardPage() {
             <span>السنة الدراسية <span dir="ltr">{year.name}</span></span>
             {nextYear && <NewYearButton next={nextYear} current={year.name} locked={nextYearLocked} />}
             {canStartSummer && <NewYearButton current={year.name} summer={summerName} locked={summerLocked} />}
+            {isActive && pastYears.length > 0 && <Link href="/dashboard/carry-over">⇠ نقل من السنة السابقة</Link>}
           </p>
         )}
 
@@ -265,19 +273,19 @@ export default async function DashboardPage() {
 
         {pastYears.length > 0 && (
           <section style={{ ...card, marginTop: "18px", borderTop: "4px solid #475569" }}>
-            <h2 style={{ margin: "0 0 10px", fontSize: "18px", color: "#475569" }}>السنوات السابقة</h2>
+            <h2 style={{ margin: "0 0 10px", fontSize: "18px", color: "#475569" }}>{isActive ? "السنوات السابقة" : "السنوات الأخرى"}</h2>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <tbody>
                 {pastYears.map((y) => (
                   <tr key={y.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                     <td style={{ padding: "7px 0", whiteSpace: "nowrap" }}>
-                      <Link href={`/dashboard/students?year=${y.id}`} style={{ color: "#1e293b" }}>{yearLabel(y.name)}</Link>
+                      <Link href={`/dashboard/year?id=${y.id}&to=/dashboard`} style={{ color: "#1e293b" }}>{yearLabel(y.name)}</Link>
                     </td>
                     <td style={{ fontSize: "13px" }}>
                       {y.Class.filter((cls) => cls._count.Enrollment > 0).map((cls, i) => (
                         <span key={cls.id}>
                           {i > 0 && " · "}
-                          <Link href={`/dashboard/students?year=${y.id}&class=${cls.id}`} style={{ color: "#64748b" }}>
+                          <Link href={`/dashboard/year?id=${y.id}&to=${encodeURIComponent(`/dashboard/students?class=${cls.id}`)}`} style={{ color: "#64748b" }}>
                             {SHIFTS[cls.shift]} {cls.name}: {cls._count.Enrollment}
                           </Link>
                         </span>

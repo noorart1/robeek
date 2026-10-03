@@ -56,10 +56,11 @@ export async function POST(request) {
         });
       }
 
-      // A payment fits in what is left; a refund in what was paid.
+      // A payment fits in what is left; a refund in what was paid; a bonus
+      // is on top of the salary, any amount.
       const paid = salaryPaid(salary.SalaryPayment);
       const room = fields.paymentType === "REFUND" ? paid : netSalary(salary) - paid;
-      if (fields.amount > room) {
+      if (fields.paymentType !== "BONUS" && fields.amount > room) {
         const what = fields.paymentType === "REFUND" ? "المدفوع" : "الباقي";
         throw Object.assign(
           new Error(`المبلغ أكبر من ${what} لهذا الشهر (${room.toLocaleString("en-US")} د.ع).`),

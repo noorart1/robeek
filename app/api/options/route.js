@@ -2,12 +2,14 @@
 import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
 import { activeAcademicYear } from "../../../lib/student-data";
+import { yearView } from "../../../lib/year-view";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Choices for the section and transport-line pickers: the school year's
-// sections, and those of the active summer course (summerClasses).
+// sections, and those of its summer course (summerClasses): the year
+// chosen in the header (lib/year-view.js); a teacher's always the active.
 
 export async function GET() {
   try {
@@ -20,8 +22,10 @@ export async function GET() {
       );
     }
 
-    const [year, summer] = await Promise.all([activeAcademicYear(), activeAcademicYear(prisma, "SUMMER")]);
     const teacher = user.role === "TEACHER";
+    const { year, summer, isActive } = teacher
+      ? { year: await activeAcademicYear(), summer: await activeAcademicYear(prisma, "SUMMER"), isActive: true }
+      : await yearView();
 
     const sections = (academicYearId) =>
       prisma.class.findMany({
@@ -45,7 +49,7 @@ export async function GET() {
     ]);
 
     return Response.json(
-      { academicYear: year?.name ?? null, classes, summerYear: summer?.name ?? null, summerClasses, lines },
+      { academicYear: year?.name ?? null, isActiveYear: isActive, classes, summerYear: summer?.name ?? null, summerClasses, lines },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {

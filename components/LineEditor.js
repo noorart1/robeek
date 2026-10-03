@@ -114,6 +114,21 @@ export function LineHeader({ line, riders }) {
     }
   }
 
+  // نشط / غير نشط: a new school year makes every line inactive.
+  async function toggleActive() {
+    setBusy(true);
+    setError(null);
+
+    try {
+      await send(`/api/transport-lines/${line.id}`, "PATCH", { isActive: !line.isActive });
+      router.refresh();
+    } catch (err) {
+      setError({ message: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove() {
     const message = riders
       ? `حذف خط ${line.name}؟ سيبقى ${riders} أطفال مسجلين لكن بدون خط نقل.`
@@ -167,7 +182,9 @@ export function LineHeader({ line, riders }) {
       <span style={{ color: "#64748b" }}>
         {SHIFTS[line.shift]} — {riders} أطفال
       </span>
+      {!line.isActive && <small style={{ color: "#b91c1c" }}>غير نشط</small>}
       <span className="no-print" style={{ marginInlineStart: "auto", display: "flex", gap: "6px" }}>
+        <button type="button" onClick={toggleActive} disabled={busy}>{line.isActive ? "إيقاف" : "تفعيل"}</button>
         <button type="button" onClick={startEditing} disabled={busy}>✎ تعديل</button>
         <button type="button" onClick={remove} disabled={busy} style={{ color: "#b91c1c" }}>حذف</button>
       </span>

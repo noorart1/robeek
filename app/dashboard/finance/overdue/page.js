@@ -6,6 +6,7 @@ import { formatDate } from "../../../../lib/arabic";
 import { iraqToday } from "../../../../lib/dates";
 import { PAYMENT_PLANS, SHIFTS, classLabel, formatMoney, fullName } from "../../../../lib/labels";
 import { formatStudent, overdueViews, studentSelect } from "../../../../lib/student-data";
+import { studentView, yearView } from "../../../../lib/year-view";
 import AppHeader from "../../../../components/AppHeader";
 
 export const dynamic = "force-dynamic";
@@ -60,18 +61,22 @@ const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums" }
 
 // المتأخرون عن الدفع: children whose paid tuition is below what their
 // instalment plan says was due by today (lib/dues.js). A child behind on
-// both the school year and the summer course has a row for each.
+// both the school year and the summer course has a row for each. For an
+// earlier year chosen in the header: everyone enrolled in it, for it.
 export default async function OverduePage({ searchParams }) {
   const user = await requirePageUser(["ADMIN"]);
   const { shift = "" } = await searchParams;
 
+  const view = await yearView();
   const students = (
     await prisma.student.findMany({
-      where: { status: "ACTIVE" },
+      where: view.isActive
+        ? { status: "ACTIVE" }
+        : { Enrollment: { some: { academicYearId: { in: [view.year.id, view.summer?.id ?? -1] } } } },
       select: studentSelect
     })
   )
-    .map(formatStudent)
+    .map((s) => formatStudent(s, studentView(view)))
     .flatMap(overdueViews)
     .filter((s) => !shift || s.enrollment?.class?.shift === shift)
     .sort((a, b) => b.financial.overdue - a.financial.overdue);

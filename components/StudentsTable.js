@@ -100,9 +100,10 @@ const NEW = "new";
 // term "summer": الدورة الصيفية — the children enrolled in the active
 // summer course, with its section, fee and payments in place of the
 // school year's (formatStudent's `summer`). Otherwise the school year,
-// without the children who only come for the summer.
-// yearId: a year that is over (formatStudent's `past`), as an archive tab.
-export default function StudentsTable({ initialClassId = "", initialReview = false, term = "", yearId = "" }) {
+// without the children who only come for the summer. The year is the one
+// chosen in the header (lib/year-view.js): the server formats every child
+// for it, so `enrollment` is that year's.
+export default function StudentsTable({ initialClassId = "", initialReview = false, term = "" }) {
   const summerView = term === "summer";
   const [students, setStudents] = useState([]);
   const [allOptions, setOptions] = useState({ classes: [], summerClasses: [], lines: [] });
@@ -270,36 +271,16 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
     setLastSync(new Date());
   }
 
-  // Earlier years, newest first, from the children's own enrollments.
-  const pastYears = [...new Map(
-    students.flatMap((s) => s.past ?? []).map((p) => [String(p.enrollment.academicYear.id), p.enrollment.academicYear])
-  ).values()].sort((a, b) => b.id - a.id);
-  const pastYear = pastYears.find((y) => String(y.id) === yearId);
-  const pastRows = pastYear
-    ? students.flatMap((s) => {
-        const p = s.past?.find((e) => e.enrollment.academicYear.id === pastYear.id);
-        return p ? [{ ...s, ...p }] : [];
-      })
-    : [];
-
-  const options = pastYear
-    ? {
-        ...allOptions,
-        academicYear: pastYear.name,
-        // Its sections, as its children were in them.
-        classes: [...new Map(pastRows.map((s) => [s.enrollment.class.id, s.enrollment.class])).values()]
-          .sort((a, b) => (b.shift || "").localeCompare(a.shift || "") || a.name.localeCompare(b.name)),
-        summerYear: null,
-        summerClasses: []
-      }
-    : summerView
-      ? { ...allOptions, classes: allOptions.summerClasses ?? [], academicYear: allOptions.summerYear }
-      : allOptions;
-  const shown = pastYear
-    ? pastRows
-    : summerView
-      ? students.filter((s) => s.summer).map((s) => ({ ...s, ...s.summer }))
-      : students.filter((s) => s.enrollment || !s.summer);
+  const options = summerView
+    ? { ...allOptions, classes: allOptions.summerClasses ?? [], academicYear: allOptions.summerYear }
+    : allOptions;
+  // An earlier year: its children. The running year: its children, and
+  // those not enrolled anywhere yet (not those only here in earlier years).
+  const shown = summerView
+    ? students.filter((s) => s.summer).map((s) => ({ ...s, ...s.summer }))
+    : allOptions.isActiveYear === false
+      ? students.filter((s) => s.enrollment)
+      : students.filter((s) => s.enrollment?.academicYear?.isActive || (!s.summer && !s.past?.length));
 
   const shownClasses = options.classes.filter((cls) => !shift || cls.shift === shift);
 
@@ -477,12 +458,11 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
         )}
       </h1>
 
-      {(allOptions.summerYear || pastYears.length > 0) && (
+      {allOptions.summerYear && (
         <nav style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
           {[
-            ["/dashboard/students", yearLabel(allOptions.academicYear), !pastYear && !summerView, "#2563eb"],
-            ...(allOptions.summerYear ? [["/dashboard/students?term=summer", yearLabel(allOptions.summerYear), !pastYear && summerView, "#ea580c"]] : []),
-            ...pastYears.map((y) => [`/dashboard/students?year=${y.id}`, yearLabel(y.name), pastYear?.id === y.id, "#475569"])
+            ["/dashboard/students", yearLabel(allOptions.academicYear), !summerView, "#2563eb"],
+            ["/dashboard/students?term=summer", yearLabel(allOptions.summerYear), summerView, "#ea580c"]
           ].map(([href, label, current, color]) => (
             <a
               key={href}
@@ -503,7 +483,7 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
       )}
 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "10px" }}>
-        {!pastYear && <button
+        <button
           type="button"
           onClick={() => { setNotice(""); setDialogId(NEW); }}
           style={{
@@ -516,7 +496,7 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
           }}
         >
           + إضافة طفل
-        </button>}
+        </button>
 
         <input
           aria-label="البحث عن طفل"

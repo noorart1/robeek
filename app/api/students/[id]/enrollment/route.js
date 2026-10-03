@@ -50,7 +50,7 @@ export async function PUT(request, { params }) {
 
     const [student, cls] = await Promise.all([
       prisma.student.findUnique({ where: { id: studentId }, select: { id: true } }),
-      prisma.class.findUnique({ where: { id: data.classId }, include: { AcademicYear: { select: { name: true } } } })
+      prisma.class.findUnique({ where: { id: data.classId }, include: { AcademicYear: { select: { name: true, isActive: true } } } })
     ]);
 
     if (!student) {
@@ -76,6 +76,11 @@ export async function PUT(request, { params }) {
       },
       update: data
     });
+
+    // Registered for the running year: the child is here again.
+    if (cls.AcademicYear.isActive) {
+      await prisma.student.update({ where: { id: studentId }, data: { status: "ACTIVE", updatedAt: new Date() } });
+    }
 
     return Response.json(
       { success: true, student: await loadStudent(studentId) },

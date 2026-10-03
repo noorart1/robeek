@@ -345,6 +345,24 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
   whole fee at the start (`lib/dues.js`); receipts are `SU26-0001`. The
   finance page counts a summer under the school year it ends. Always use
   `activeAcademicYear(client, kind)` — never `findFirst({ isActive })`.
+- **A new school year starts empty.** «بدء السنة الدراسية» copies the
+  sections without teachers and enrolls nobody; every staff member and
+  transport line becomes INACTIVE (hidden until shown; a line keeps its
+  riders as history), every child too, until registered for the new year
+  from their dialog while viewing the earlier year (which makes them
+  ACTIVE again). «نقل من السنة السابقة» (`/dashboard/carry-over`) brings
+  ticked children (same section and attendance type, fee 0, no plan),
+  staff, lines and section teachers over in one go — never money.
+  `scripts/reset-data.js` empties a year that was started before this
+  (2026-2027).
+- **Every page shows one school year**, chosen in the header (admins
+  only; `components/YearPicker.js`), kept in the `year` cookie, the active
+  one by default; `/dashboard/year?id=…&to=…` sets it from a link. Server
+  code reads it with `yearView()` (`lib/year-view.js`) — never the cookie
+  directly — and passes `studentView(view)` to `formatStudent`, so a
+  child's `enrollment`, `summer` and money are that year's. An earlier
+  year is fully editable, under a yellow banner. The finance year runs
+  October to September (`yearMonths`). Teachers always get the active year.
 - **Attendance** (`/dashboard/attendance`, `components/AttendanceBoard.js`)
   stores one `Attendance` row per child per day: PRESENT / ABSENT / LATE /
   EXCUSED, or no row for "not recorded". Days are `YYYY-MM-DD` strings from

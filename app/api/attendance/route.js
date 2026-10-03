@@ -55,9 +55,12 @@ export async function GET(request) {
       if (!own) return forbidden();
     }
 
+    // A section of an earlier year (chosen in the header): everyone in it
+    // then, though they have all left since.
+    const past = await prisma.class.count({ where: { id: classId, AcademicYear: { isActive: false } } });
     const students = await prisma.student.findMany({
       where: {
-        status: "ACTIVE",
+        ...(!past && { status: "ACTIVE" }),
         Enrollment: { some: { classId } }
       },
       select: {

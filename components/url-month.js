@@ -4,12 +4,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { iraqToday } from "../lib/dates";
 
 // The month a finance ledger shows, kept in the URL (?month=2026-09) so it
-// survives switching tabs (the tab links carry it) and reloading.
-export function useUrlMonth() {
+// survives switching tabs (the tab links carry it) and reloading. Without
+// one, `fallback` (an earlier year's last month), else this month.
+export function useUrlMonth(fallback) {
   const router = useRouter();
   const params = useSearchParams();
   const fromUrl = params.get("month");
-  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(fromUrl || "") ? fromUrl : iraqToday().slice(0, 7);
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(fromUrl || "") ? fromUrl : fallback || iraqToday().slice(0, 7);
 
   function setMonth(value) {
     const query = new URLSearchParams(params);

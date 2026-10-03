@@ -3,10 +3,11 @@ import prisma from "../../../lib/prisma";
 import { requirePageUser } from "../../../lib/auth";
 import { SHIFTS, classLabel, formatMoney, summerYearName, yearLabel } from "../../../lib/labels";
 import { formatStudent, overdueViews, studentSelect } from "../../../lib/student-data";
-import { PARTNERS, monthlySummary, paidTotals, yearMonths } from "../../../lib/finance";
+import { PARTNERS, incomeBreakdown, monthlySummary, paidTotals, yearMonths } from "../../../lib/finance";
 import { matchesSearch } from "../../../lib/arabic";
 import { salaryAmount } from "../../../lib/staff";
 import { iraqToday } from "../../../lib/dates";
+import { studentView, yearView } from "../../../lib/year-view";
 import Link from "next/link";
 import AppHeader from "../../../components/AppHeader";
 import SalariesBoard from "../../../components/SalariesBoard";
@@ -17,7 +18,8 @@ export const dynamic = "force-dynamic";
 const dayMonth = (date) => new Date(date).toISOString().slice(0, 7);
 
 // Each tab holds only its own ledger: the two expense tabs, and the box
-// tab with الصندوق, حصص الشركاء and the money moving in and out of them.
+// tab with الإيرادات والأرباح, الصندوق, الحصص and the money moving in and
+// out of them.
 const TABS = {
   summary: "الملخص",
   salaries: "رواتب الموظفين",
@@ -27,9 +29,8 @@ const TABS = {
 };
 const BOARD = { general: "GENERAL", fixed: "ASSET" };
 
-// The chosen school year and month (?year, ?month) go with every tab.
+// The chosen month (?month) goes with every tab; the year is the header's.
 const keep = (params) => ({
-  ...(params.year && { year: params.year }),
   ...(params.month && { month: params.month })
 });
 
@@ -102,6 +103,17 @@ export default async function FinancePage({ searchParams }) {
   // ?tab=expenses was the one ledger tab before it was split.
   const tab = params.tab === "expenses" ? "general" : params.tab in TABS ? params.tab : "summary";
 
+  // The school year chosen in the header (lib/year-view.js). School years
+  // only: a summer course belongs to the year it ends.
+  const view = await yearView();
+  const { year, isActive: isActiveYear } = view;
+  // The active year runs on until the next one is started.
+  const yearRange = yearMonths(year?.name);
+  const thisMonth = iraqToday().slice(0, 7);
+  const range = yearRange && isActiveYear && thisMonth > yearRange.to ? { ...yearRange, to: thisMonth } : yearRange;
+  // The ledgers open on this month, or an earlier year's last.
+  const defaultMonth = range && (thisMonth < range.from || thisMonth > range.to) ? range.to : thisMonth;
+
   if (tab === "salaries" || tab in BOARD) {
     return (
       <>
@@ -109,25 +121,14 @@ export default async function FinancePage({ searchParams }) {
         <main style={{ maxWidth: "1440px", margin: "24px auto", padding: "0 20px" }}>
           <h1 style={{ color: "#1e40af", marginBottom: "12px" }}>الملف المالي والأرصدة</h1>
           <Tabs tab={tab} params={params} />
-          {tab === "salaries" ? <SalariesBoard /> : <ExpensesBoard key={tab} kind={BOARD[tab]} />}
+          {tab === "salaries" ? <SalariesBoard defaultMonth={defaultMonth} /> : <ExpensesBoard key={tab} kind={BOARD[tab]} defaultMonth={defaultMonth} />}
         </main>
       </>
     );
   }
 
-  // ?year=<id> shows an earlier school year; the active one by default.
-  // School years only: a summer course belongs to the year it ends.
-  const years = await prisma.academicYear.findMany({ where: { kind: "REGULAR" }, orderBy: { name: "desc" } });
-  const active = years.find((y) => y.isActive) ?? null;
-  const year = years.find((y) => String(y.id) === params.year) ?? active;
-  const isActiveYear = year?.id === active?.id;
-  // The active year runs on until the next one is started.
-  const yearRange = yearMonths(year?.name);
-  const thisMonth = iraqToday().slice(0, 7);
-  const range = yearRange && isActiveYear && thisMonth > yearRange.to ? { ...yearRange, to: thisMonth } : yearRange;
-
-  // الملخص الشهري: the months of the chosen school year (September to
-  // August), or every month when the year's name has no dates in it.
+  // الملخص الشهري: the months of the chosen school year (October to
+  // September), or every month when the year's name has no dates in it.
   const [allPayments, allSalaries, allExpenses] = await Promise.all([
     prisma.payment.findMany({
       where: { voidedAt: null },
@@ -184,8 +185,14 @@ export default async function FinancePage({ searchParams }) {
   });
   const unassigned = withdrawals - partners.reduce((t, p) => t + p.taken, 0);
 
+  // الإيرادات والأرباح: the same totals as «الملخص», income split by kind.
+  const income = incomeBreakdown(allPayments, (m) => !range || (m >= range.from && m <= range.to));
+  const received = income.cash + income.card + income.unknown + income.curriculum;
+  const totalIncome = received + monthTotal("otherIncome") - income.refunds;
+
   const enrollmentSelect = {
     tuitionFee: true,
+    status: true,
     Class: { select: { id: true, name: true, shift: true } },
     Student: { select: { status: true } },
     // Voided receipts never count.
@@ -200,11 +207,15 @@ export default async function FinancePage({ searchParams }) {
   const summerTotals = emptyTotals();
   for (const enrollment of summerEnrollments) add(summerTotals, enrollment);
 
-  // Overdue is about today, so only for the active year.
+  // Overdue as of today: the children here now, or everyone enrolled in an
+  // earlier year, owing for it.
   const overdue = (
-    isActiveYear ? await prisma.student.findMany({ where: { status: "ACTIVE" }, select: studentSelect }) : []
+    await prisma.student.findMany({
+      where: isActiveYear ? { status: "ACTIVE" } : { Enrollment: { some: { academicYearId: year?.id ?? -1 } } },
+      select: studentSelect
+    })
   )
-    .map(formatStudent)
+    .map((s) => formatStudent(s, studentView(view)))
     .flatMap(overdueViews);
   const overdueTotal = overdue.reduce((sum, s) => sum + s.financial.overdue, 0);
 
@@ -218,7 +229,9 @@ export default async function FinancePage({ searchParams }) {
 
     // Like the workbook's الغاء التسجيل row: money from children who have
     // left is shown separately rather than hidden.
-    if (enrollment.Student.status !== "ACTIVE") {
+    // In an earlier year everyone has left since: what counts is whether
+    // the enrollment itself ended.
+    if ((isActiveYear ? enrollment.Student.status : enrollment.status) !== "ACTIVE") {
       add(inactive, enrollment);
       continue;
     }
@@ -262,32 +275,14 @@ export default async function FinancePage({ searchParams }) {
           الملف المالي والأرصدة
         </h1>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", color: "#64748b", marginBottom: "12px" }}>
-          السنة الدراسية:
-          {years.map((y) => (
-            <Link
-              key={y.id}
-              href={`/dashboard/finance?${new URLSearchParams({ ...(tab === "box" && { tab }), ...(!y.isActive && { year: y.id }), ...(params.month && { month: params.month }) })}`}
-              aria-current={y.id === year?.id ? "page" : undefined}
-              dir="ltr"
-              style={{
-                padding: "4px 10px",
-                borderRadius: "6px",
-                textDecoration: "none",
-                color: y.id === year?.id ? "#ffffff" : "#1e40af",
-                backgroundColor: y.id === year?.id ? "#2563eb" : "#eff6ff"
-              }}
-            >
-              {y.name}{y.isActive ? " (الحالية)" : ""}
-            </Link>
-          ))}
-          {!years.length && "لا توجد سنة دراسية"}
+          السنة الدراسية: <span dir="ltr">{year?.name ?? "لا توجد سنة دراسية"}</span>
           <span style={{ marginInlineStart: "auto" }}>المبالغ بالدينار العراقي</span>
         </div>
 
         <Tabs tab={tab} params={params} />
 
         {tab === "summary" && (<>
-        {isActiveYear && (
+        {(
         <Link
           href="/dashboard/finance/overdue"
           style={{
@@ -391,24 +386,34 @@ export default async function FinancePage({ searchParams }) {
         {tab === "box" && (<>
         <p style={{ color: "#64748b", marginTop: 0 }}>
           {range && <>من <span dir="ltr">{range.from}</span> إلى <span dir="ltr">{range.to}</span>. </>}
-          الصافي من «الملخص»؛ حصة كل شريك من الصافي، والسحب ما سُجّل باسمه أدناه («سحب البراق»…).
+          استحقاق كل شريك = صافي الربح × نسبته؛ والسحب ما سُجّل باسمه في «الحركات» («سحب البراق»…).
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "20px", alignItems: "start" }}>
           <section>
-            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الصندوق</h2>
+            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الإيرادات والأرباح</h2>
             <div style={box}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <tbody>
                   {[
-                    ["الصافي", net],
-                    ["سُلّم إلى الإدارة: الواصل النقدي + المناهج والزي (من تشرين الأول 2026)", manualHandovers - handovers],
-                    ...(manualHandovers ? [["سُلّم إلى الإدارة: المسجل يدوياً سابقاً", -manualHandovers]] : []),
-                    ["صندوق المركز (الصافي − التسليم)", net - handovers, true],
-                    ["صندوق الإدارة (التسليم − سحب الشركاء)", handovers - withdrawals, true]
-                  ].map(([label, value, strong]) => (
+                    // الواصل: everything received from the parents, of
+                    // which tuition by نوع الدفع and curriculum/uniform.
+                    ["أقساط نقداً", income.cash, false, true],
+                    ["أقساط بطاقة", income.card, false, true],
+                    ...(income.unknown ? [["أقساط (نوع الدفع غير محدد)", income.unknown, false, true]] : []),
+                    ["المنهج والزي", income.curriculum, false, true],
+                    ["الواصل", received, true],
+                    ...(monthTotal("otherIncome") ? [["وارد آخر", monthTotal("otherIncome")]] : []),
+                    ...(income.refunds ? [["الاسترجاع", -income.refunds]] : []),
+                    ["إجمالي الإيرادات", totalIncome, true],
+                    ["الرواتب والمكافآت", -monthTotal("salaries")],
+                    ["المصروفات العامة", -monthTotal("expenses")],
+                    ["المصروفات الثابتة", -monthTotal("assets")],
+                    ["صافي الربح", net, true]
+                  ].map(([label, value, strong, part]) => (
                     <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
-                      <td style={cell}>{label}</td>
-                      <td style={{ ...money, color: value < 0 ? "#b91c1c" : undefined }}>{formatMoney(value)}</td>
+                      {/* A part of الواصل: indented and quieter. */}
+                      <td style={{ ...cell, whiteSpace: "normal", ...(part && { paddingInlineStart: "28px", color: "#64748b" }) }}>{label}</td>
+                      <td style={{ ...money, color: value < 0 ? "#b91c1c" : part ? "#64748b" : undefined }}>{formatMoney(value)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -417,14 +422,36 @@ export default async function FinancePage({ searchParams }) {
           </section>
 
           <section>
-            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>حصص الشركاء</h2>
+            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الصندوق</h2>
+            <div style={box}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  {[
+                    ["صافي الربح", net],
+                    ["التسليم إلى الإدارة: النقدي والمنهج والزي (تلقائي)", manualHandovers - handovers],
+                    ...(manualHandovers ? [["التسليم إلى الإدارة: المسجل يدوياً سابقاً", -manualHandovers]] : []),
+                    ["صندوق المركز (صافي الربح − التسليم)", net - handovers, true],
+                    ["صندوق الإدارة (التسليم − سحب الشركاء)", handovers - withdrawals, true]
+                  ].map(([label, value, strong]) => (
+                    <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
+                      <td style={{ ...cell, whiteSpace: "normal" }}>{label}</td>
+                      <td style={{ ...money, color: value < 0 ? "#b91c1c" : undefined }}>{formatMoney(value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section style={{ gridColumn: "1 / -1" }}>
+            <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الحصص</h2>
             <div style={box}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
                     <th style={cell}>الشريك</th>
                     <th style={money}>النسبة</th>
-                    <th style={money}>الاستحقاق</th>
+                    <th style={money}>الاستحقاق من صافي الربح</th>
                     <th style={money}>السحب</th>
                     <th style={money}>الباقي</th>
                   </tr>
@@ -452,8 +479,8 @@ export default async function FinancePage({ searchParams }) {
           </section>
         </div>
 
-        <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "8px" }}>الحركات: مبيعات المركز، تسليم الإدارة، سحب الشركاء</h2>
-        <ExpensesBoard kind="BOX" />
+        <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "8px" }}>الحركات</h2>
+        <ExpensesBoard kind="BOX" defaultMonth={defaultMonth} />
         </>)}
       </main>
     </>

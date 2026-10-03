@@ -132,7 +132,8 @@ function LineCard({ line, students, lineNames, search }) {
     setError(null);
 
     try {
-      await send(`/api/transport-lines/${line.id}/riders`, "PUT", { studentIds: ids });
+      // shownIds: only the riders on this page change (not another year's).
+      await send(`/api/transport-lines/${line.id}/riders`, "PUT", { studentIds: ids, shownIds: line.riders.map((r) => r.id) });
       router.refresh();
     } catch (err) {
       setError(err.message);
@@ -170,7 +171,7 @@ function LineCard({ line, students, lineNames, search }) {
       style={{ backgroundColor: "#ffffff", borderRadius: "12px", overflowX: "auto" }}
     >
       <LineHeader
-        line={{ id: line.id, name: line.name, driverPhone: line.driverPhone, shift: line.shift }}
+        line={{ id: line.id, name: line.name, driverPhone: line.driverPhone, shift: line.shift, isActive: line.isActive }}
         riders={line.riders.length}
       />
 
@@ -261,8 +262,14 @@ function LineCard({ line, students, lineNames, search }) {
   );
 }
 
-export default function LinesBoard({ lines, students }) {
+// pastYear: an earlier year chosen in the header; every line its children rode.
+export default function LinesBoard({ lines: allLines, students, pastYear = false }) {
   const [search, setSearch] = useState("");
+  // Inactive lines (every one after a new school year) are hidden until
+  // asked for; their riders are the earlier years' children.
+  const [showInactive, setShowInactive] = useState(false);
+  const inactiveCount = pastYear ? 0 : allLines.filter((line) => !line.isActive).length;
+  const lines = showInactive || pastYear ? allLines : allLines.filter((line) => line.isActive);
 
   const lineNames = Object.fromEntries(lines.map((line) => [line.id, line.name]));
   const riders = lines.reduce((sum, line) => sum + line.riders.length, 0);
@@ -303,6 +310,12 @@ export default function LinesBoard({ lines, students }) {
           }}
         />
         <PrintButton label="🖨 طباعة القوائم" />
+        {inactiveCount > 0 && (
+          <label style={{ color: "#475569", alignSelf: "center" }}>
+            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />{" "}
+            عرض الخطوط غير النشطة ({inactiveCount})
+          </label>
+        )}
       </div>
 
       {lines.length === 0 && <p style={{ color: "#64748b" }}>لا توجد خطوط نقل بعد.</p>}

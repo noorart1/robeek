@@ -1,6 +1,9 @@
 
 import Link from "next/link";
+import prisma from "../lib/prisma";
+import { yearView } from "../lib/year-view";
 import LogoutButton from "./LogoutButton";
+import YearPicker, { BackToActiveYear } from "./YearPicker";
 
 // Teachers see attendance only; the pages themselves enforce the same.
 const links = [
@@ -14,8 +17,20 @@ const links = [
   { href: "/dashboard/backups", label: "النسخ الاحتياطي", roles: ["ADMIN"] }
 ];
 
-export default function AppHeader({ user, active }) {
+// Admins choose the school year every page shows (lib/year-view.js); an
+// earlier one is announced under the header, editable like the current.
+export default async function AppHeader({ user, active }) {
+  const admin = user.role === "ADMIN";
+  const [view, years] = admin
+    ? await Promise.all([
+        yearView(),
+        prisma.academicYear.findMany({ where: { kind: "REGULAR" }, select: { id: true, name: true, isActive: true }, orderBy: { name: "desc" } })
+      ])
+    : [null, []];
+  const activeId = years.find((y) => y.isActive)?.id ?? null;
+
   return (
+    <>
     <header
       className="no-print"
       style={{
@@ -79,8 +94,30 @@ export default function AppHeader({ user, active }) {
         >
           👤 {user.fullName}
         </Link>
+        {years.length > 1 && <YearPicker years={years} selectedId={view.year?.id} activeId={activeId} />}
         <LogoutButton />
       </div>
     </header>
+    {view && !view.isActive && (
+      <div
+        className="no-print"
+        role="status"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          flexWrap: "wrap",
+          padding: "8px 20px",
+          backgroundColor: "#fef3c7",
+          color: "#92400e",
+          borderBottom: "1px solid #fcd34d"
+        }}
+      >
+        <strong>تعرض الآن السنة الدراسية {view.year.name}، وليست السنة الحالية.</strong>
+        <span>التعديلات تُحفظ في هذه السنة.</span>
+        <BackToActiveYear />
+      </div>
+    )}
+    </>
   );
 }

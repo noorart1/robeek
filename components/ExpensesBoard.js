@@ -16,12 +16,17 @@ import { EXPENSE_CATEGORIES, EXPENSE_ITEMS, PARTNERS } from "../lib/finance";
 const BOARDS = {
   GENERAL: { categories: ["GENERAL"], items: ["الكهرباء", "ماء", "انترنت", ...EXPENSE_ITEMS], noun: "مصروف", empty: "لا توجد مصاريف عامة في هذا الشهر." },
   ASSET: { categories: ["ASSET"], items: ["رسوم ادارية", "العاب وديكور", "تطوير", "اجهزة"], noun: "مصروف ثابت", empty: "لا توجد مصاريف ثابتة في هذا الشهر." },
-  // تسليم الإدارة is worked out from the receipts now: its old hand-entered
-  // rows are listed (and editable) but no new ones are added.
+  // تسليم الإدارة is worked out from the receipts now, and وارد آخر is no
+  // longer entered: their old rows are listed (and editable) but no new
+  // ones are added, so a new movement is always سحب الشركاء.
   BOX: {
-    categories: ["INCOME", "WITHDRAWAL", "HANDOVER"],
-    legacy: ["HANDOVER"],
-    items: ["مبيعات المركز", ...PARTNERS.map((p) => `سحب ${p.name}`)],
+    categories: ["WITHDRAWAL", "INCOME", "HANDOVER"],
+    legacy: ["INCOME", "HANDOVER"],
+    // A fixed list, nothing typed by hand (older rows keep their item).
+    items: [...PARTNERS.map((p) => `سحب ${p.name}`), "تسليم ابوحسن"],
+    fixedItems: true,
+    // The list can be narrowed to one البند.
+    itemFilter: true,
     noun: "حركة",
     empty: "لا توجد حركات في هذا الشهر."
   }
@@ -41,17 +46,21 @@ const blank = (month, category) => ({
 
 // kind GENERAL, ASSET or BOX: that ledger for one month, added to,
 // corrected or removed here.
-export default function ExpensesBoard({ kind = "GENERAL" }) {
+export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
   const board = BOARDS[kind];
-  const [month, setMonth] = useUrlMonth();
+  const [month, setMonth] = useUrlMonth(defaultMonth);
   const [expenses, setExpenses] = useState(null);
   const [form, setForm] = useState(() => blank(month, board.categories[0]));
   const [editingId, setEditingId] = useState(null);
-  // البند: chosen from the board's list, or typed by hand («أخرى»). A
+  // البند: chosen from the board's list, or typed by hand («أخرى», not on
+  // the box board; editing an older row with another item still can). A
   // datalist hid every item but the one already typed.
   const [customItem, setCustomItem] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // البند filter: the items ticked; none ticked shows everything.
+  const [itemFilter, setItemFilter] = useState([]);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   async function load() {
     try {
@@ -112,11 +121,18 @@ export default function ExpensesBoard({ kind = "GENERAL" }) {
     setError(null);
   }
 
-  const picker = board.categories.length > 1;
   const editingCategory = expenses?.find((e) => e.id === editingId)?.category;
   const choices = board.categories.filter((c) => !board.legacy?.includes(c) || c === editingCategory);
+  // The form picks among what can still be added; the list shows every kind.
+  const picker = choices.length > 1;
+  const kinds = board.categories.length > 1;
+  // The list's items: the board's, then any older ones found this month.
+  const listItems = [...new Set([...board.items, ...(expenses ?? []).map((e) => e.item)])];
+  const shown = (expenses ?? []).filter((e) => !itemFilter.length || itemFilter.includes(e.item));
+  const toggleItem = (item) =>
+    setItemFilter((f) => (f.includes(item) ? f.filter((i) => i !== item) : [...f, item]));
   const sum = (category) =>
-    (expenses ?? []).filter((e) => !category || e.category === category).reduce((t, e) => t + e.amount, 0);
+    shown.filter((e) => !category || e.category === category).reduce((t, e) => t + e.amount, 0);
 
   return (
     <>
@@ -147,7 +163,7 @@ export default function ExpensesBoard({ kind = "GENERAL" }) {
           >
             <option value="">{kind === "BOX" ? "— البند —" : "— بند المصروف —"}</option>
             {board.items.map((i) => <option key={i} value={i}>{i}</option>)}
-            <option value="__other">أخرى (كتابة يدوية)…</option>
+            {!board.fixedItems && <option value="__other">أخرى (كتابة يدوية)…</option>}
           </select>
         )}
         {picker && (
@@ -166,14 +182,67 @@ export default function ExpensesBoard({ kind = "GENERAL" }) {
         {error && <p role="alert" style={{ color: "#dc2626", margin: 0, width: "100%" }}>{error.message}</p>}
       </form>
 
+      {itemFilter.length > 0 && (
+        // The ticked items, each removable with ✕.
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center", marginBottom: "8px", color: "#475569" }}>
+          تصفية البند:
+          {itemFilter.map((i) => (
+            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 6px 3px 10px", borderRadius: "999px", backgroundColor: "#dbeafe", color: "#1e40af" }}>
+              {i}
+              <button type="button" aria-label={`إزالة ${i} من التصفية`} onClick={() => toggleItem(i)} style={{ border: "none", background: "none", color: "inherit", cursor: "pointer", padding: "0 2px" }}>✕</button>
+            </span>
+          ))}
+          <button type="button" onClick={() => setItemFilter([])}>إظهار الكل</button>
+        </div>
+      )}
+
       {expenses && (
         <div style={{ backgroundColor: "#ffffff", borderRadius: "12px", overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
                 <th style={cell}>التاريخ</th>
-                <th style={cell}>{kind === "BOX" ? "البند" : "بند المصروف"}</th>
-                {picker && <th style={cell}>النوع</th>}
+                <th style={{ ...cell, position: "relative" }}>
+                  {kind === "BOX" ? "البند" : "بند المصروف"}
+                  {board.itemFilter && (
+                    // Closes on Escape or a click outside the icon and its list.
+                    <span onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFilterOpen(false)}>
+                      <button
+                        type="button"
+                        title={itemFilter.length ? `تصفية: ${itemFilter.join("، ")}` : "تصفية حسب البند"}
+                        aria-label="تصفية حسب البند"
+                        aria-expanded={filterOpen}
+                        onClick={() => setFilterOpen((o) => !o)}
+                        style={{ marginInlineStart: "6px", padding: "2px 4px", border: "none", borderRadius: "4px", cursor: "pointer", verticalAlign: "middle", backgroundColor: itemFilter.length ? "#2563eb" : "transparent", color: itemFilter.length ? "#ffffff" : "#1e40af" }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M3 4h18l-7 8.5V19l-4 2v-8.5L3 4z" />
+                        </svg>
+                      </button>
+                      {filterOpen && (
+                        <div
+                          role="group"
+                          aria-label="البند"
+                          tabIndex={-1}
+                          ref={(el) => el && !el.contains(document.activeElement) && el.focus()}
+                          onKeyDown={(e) => e.key === "Escape" && setFilterOpen(false)}
+                          style={{ position: "absolute", top: "100%", insetInlineStart: 0, zIndex: 5, minWidth: "190px", padding: "8px 10px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "8px", boxShadow: "0 4px 12px rgba(15, 23, 42, 0.12)", fontWeight: "normal", color: "#1e293b", outline: "none" }}
+                        >
+                          {listItems.map((i) => (
+                            <label key={i} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "3px 0" }}>
+                              <input type="checkbox" checked={itemFilter.includes(i)} onChange={() => toggleItem(i)} />
+                              {i}
+                            </label>
+                          ))}
+                          <button type="button" disabled={!itemFilter.length} onClick={() => setItemFilter([])} style={{ marginTop: "6px" }}>
+                            إظهار الكل
+                          </button>
+                        </div>
+                      )}
+                    </span>
+                  )}
+                </th>
+                {kinds && <th style={cell}>النوع</th>}
                 <th style={cell}>نوع الدفع</th>
                 <th style={money}>المبلغ</th>
                 <th style={cell}>ملاحظات</th>
@@ -181,11 +250,11 @@ export default function ExpensesBoard({ kind = "GENERAL" }) {
               </tr>
             </thead>
             <tbody>
-              {expenses.map((e) => (
+              {shown.map((e) => (
                 <tr key={e.id} style={{ backgroundColor: editingId === e.id ? "#fef9c3" : undefined }}>
                   <td style={cell}>{formatDate(e.date)}</td>
                   <td style={cell}>{e.item}</td>
-                  {picker && <td style={cell}>{EXPENSE_CATEGORIES[e.category]}</td>}
+                  {kinds && <td style={cell}>{EXPENSE_CATEGORIES[e.category]}</td>}
                   <td style={cell}>{PAYMENT_METHODS[e.paymentMethod] || "—"}</td>
                   <td style={money}>{formatMoney(e.amount)}</td>
                   <td style={{ ...cell, maxWidth: "280px", overflow: "hidden", textOverflow: "ellipsis" }} title={e.notes || undefined}>{e.notes}</td>
@@ -195,13 +264,13 @@ export default function ExpensesBoard({ kind = "GENERAL" }) {
                   </td>
                 </tr>
               ))}
-              {expenses.length === 0 && (
-                <tr><td colSpan={picker ? 7 : 6} style={{ ...cell, color: "#64748b" }}>{board.empty}</td></tr>
+              {shown.length === 0 && (
+                <tr><td colSpan={kinds ? 7 : 6} style={{ ...cell, color: "#64748b" }}>{board.empty}</td></tr>
               )}
             </tbody>
             <tfoot>
               {/* Per category only where the tab has several (they are not one sum). */}
-              {picker ? board.categories.map((category) => (
+              {kinds ? board.categories.map((category) => (
                 <tr key={category} style={{ fontWeight: "bold", backgroundColor: "#f8fafc" }}>
                   <td style={cell} colSpan={4}>
                     {EXPENSE_CATEGORIES[category]}

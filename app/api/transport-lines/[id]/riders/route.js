@@ -14,8 +14,8 @@ function errorResponse(message, status) {
 }
 
 // أطفال الخط بترتيب الاستلام: the body lists every rider of the line, in
-// pickup order. Children left out lose the line; children listed from
-// another line move to this one.
+// pickup order, and shownIds those the page showed. Children shown and
+// left out lose the line; children listed from another line move to it.
 // ponytail: whole-list replace, last writer wins between two admins
 // editing the same line at once; send add/remove operations if that bites.
 
@@ -49,6 +49,7 @@ export async function PUT(request, { params }) {
     }
 
     const ids = checked.studentIds;
+    const shownIds = Array.isArray(body.shownIds) ? body.shownIds.filter(Number.isInteger) : [];
 
     const result = await prisma.$transaction(async (tx) => {
       const line = await tx.transportLine.findUnique({ where: { id: lineId } });
@@ -65,7 +66,9 @@ export async function PUT(request, { params }) {
       const now = new Date();
 
       await tx.student.updateMany({
-        where: { transportLineId: lineId, id: { notIn: ids } },
+        // Only the riders the page showed (shownIds) leave the line: those
+        // of another year, hidden there, stay on it as history.
+        where: { transportLineId: lineId, id: { notIn: ids, in: shownIds } },
         data: { transportLineId: null, transportOrder: null, updatedAt: now }
       });
 

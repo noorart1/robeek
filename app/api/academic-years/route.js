@@ -12,11 +12,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // بدء سنة دراسية جديدة: "2025-2026" → "2026-2027". Admins only.
-// Copies the active year's sections (with their teachers) and moves every
-// active child into the same section with the same fee, plan and type,
-// starting on the first school day (morning 1 October, evening
-// 1 November — lib/dues.js). Last year's enrollments, payments and debts
-// stay as they are. A backup is taken first.
+// The year starts empty: the active year's sections are copied without
+// their teachers, nobody is enrolled, every child becomes INACTIVE until
+// registered for it (PUT /api/students/[id]/enrollment, from the earlier
+// year's tab), and every staff member and transport line INACTIVE until
+// reactivated (a line keeps its riders). Earlier years, with their payments, debts, salaries and
+// expenses, stay as they are and are browsed from the dashboard and the
+// finance page. A backup is taken first.
 //
 // POST { kind: "SUMMER" } starts الدورة الصيفية instead (startSummer).
 
@@ -43,38 +45,22 @@ export async function POST(request) {
 
     await backupNow("pre-new-year");
 
-    const startYear = name.slice(0, 4);
     const result = await prisma.$transaction(async (tx) => {
       const year = await tx.academicYear.create({ data: { name, isActive: false } });
 
-      const classMap = new Map();
-      for (const cls of await tx.class.findMany({ where: { academicYearId: current.id } })) {
-        const { id, academicYearId, ...fields } = cls;
-        classMap.set(id, (await tx.class.create({ data: { ...fields, academicYearId: year.id } })).id);
-      }
-
-      const enrollments = await tx.enrollment.findMany({
-        where: { academicYearId: current.id, Student: { status: "ACTIVE" } },
-        include: { Class: { select: { shift: true } } }
+      const classes = await tx.class.findMany({ where: { academicYearId: current.id } });
+      await tx.class.createMany({
+        data: classes.map(({ name, grade, shift, capacity }) => ({ name, grade, shift, capacity, academicYearId: year.id }))
       });
 
-      await tx.enrollment.createMany({
-        data: enrollments.map((e) => ({
-          studentId: e.studentId,
-          classId: classMap.get(e.classId),
-          academicYearId: year.id,
-          enrollmentDate: new Date(`${startYear}-${e.Class.shift === "EVENING" ? "11" : "10"}-01T00:00:00.000Z`),
-          status: "ACTIVE",
-          tuitionFee: e.tuitionFee,
-          attendanceType: e.attendanceType,
-          paymentPlan: e.paymentPlan
-        }))
-      });
+      await tx.student.updateMany({ where: { status: "ACTIVE" }, data: { status: "INACTIVE", updatedAt: new Date() } });
+      await tx.staff.updateMany({ where: { isActive: true }, data: { isActive: false, updatedAt: new Date() } });
+      await tx.transportLine.updateMany({ data: { isActive: false } });
 
       await tx.academicYear.update({ where: { id: current.id }, data: { isActive: false } });
       await tx.academicYear.update({ where: { id: year.id }, data: { isActive: true } });
 
-      return { name, classes: classMap.size, students: enrollments.length };
+      return { name, classes: classes.length };
     });
 
     return Response.json(result, { status: 201, headers: { "Cache-Control": "no-store" } });

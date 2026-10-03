@@ -168,6 +168,7 @@ model TransportLine {
   name        String
   driverPhone String?
   shift       String    @default("MORNING")
+  isActive    Boolean   @default(true)
   Student     Student[]
 }
 
@@ -256,7 +257,7 @@ model SalaryPayment {
   id            Int       @id @default(autoincrement())
   salaryId      Int
   amount        Decimal   @db.Decimal(15, 2)
-  paymentType   String    @default("SALARY") @db.VarChar(20) // SALARY | REFUND (استرجاع)
+  paymentType   String    @default("SALARY") @db.VarChar(20) // SALARY | BONUS (مكافأة) | REFUND (استرجاع)
   paidOn        DateTime? @db.Date
   paymentMethod String?   @db.VarChar(20)
   receiptNo     String?   @unique

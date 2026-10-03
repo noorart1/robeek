@@ -18,8 +18,8 @@ const small = { ...control, padding: "5px 6px" };
 // (the person's usual salary until set otherwise), what was paid and what
 // is left. «دفع الباقي» pays the rest in one receipt; part payments,
 // receipts and voiding are in the person's window (click the name).
-export default function SalariesBoard() {
-  const [month, setMonth] = useUrlMonth();
+export default function SalariesBoard({ defaultMonth }) {
+  const [month, setMonth] = useUrlMonth(defaultMonth);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(null); // staff id shown in the dialog

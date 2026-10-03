@@ -203,7 +203,8 @@ test("salary payment: positive amount, valid month/date/method; voided never cou
   assert.equal(salary.SalaryPayment, undefined);
 
   // استرجاع: stored positive, taken off what was paid.
-  assert.equal(checkSalaryPayment({ ...base, paymentType: "BONUS" }).field, "paymentType");
+  assert.equal(checkSalaryPayment({ ...base, paymentType: "GIFT" }).field, "paymentType");
+  assert.equal(checkSalaryPayment({ ...base, paymentType: "BONUS" }).data.paymentType, "BONUS");
   assert.equal(checkSalaryPayment(base).data.paymentType, "SALARY");
   const refunded = formatSalary({
     baseSalary: "700000.00", bonus: "0.00", deduction: "0.00",
@@ -308,7 +309,7 @@ test("school years: the next one, and the months each covers", async () => {
   assert.equal(nextYearName("2027 - 2028"), "2028-2029");
   assert.equal(nextYearName("السنة الأولى"), null);
   // A summer belongs to the year that just ended.
-  assert.deepEqual(yearMonths("2025-2026"), { from: "2025-09", to: "2026-08" });
+  assert.deepEqual(yearMonths("2025-2026"), { from: "2025-10", to: "2026-09" });
   assert.equal(yearMonths(undefined), null);
 });
 
@@ -343,4 +344,34 @@ test("the summer that can be started: this year's until August, then next year's
   assert.equal(upcomingSummerName("2026-08-31"), "صيف 2026");
   assert.equal(upcomingSummerName("2026-09-01"), "صيف 2027");
   assert.equal(upcomingSummerName("2027-01-15"), "صيف 2027");
+});
+
+test("salary payments: a bonus is cash out but not towards the salary", async () => {
+  const { salaryAmount, salaryPaid } = await import("../lib/staff.js");
+  const payments = [
+    { amount: 500000, paymentType: "SALARY" },
+    { amount: 100000, paymentType: "BONUS" },
+    { amount: 50000, paymentType: "REFUND" },
+    { amount: 999, paymentType: "SALARY", voidedAt: new Date() }
+  ];
+
+  assert.equal(salaryPaid(payments), 450000);
+  assert.equal(payments.filter((p) => !p.voidedAt).reduce((t, p) => t + salaryAmount(p), 0), 550000);
+});
+
+test("income breakdown: tuition by method, curriculum, refunds; matches the summary", async () => {
+  const { incomeBreakdown, monthlySummary } = await import("../lib/finance.js");
+  const payments = [
+    { amount: 200000, paymentType: "TUITION", paymentMethod: "CASH", paymentDate: "2026-10-05T09:00:00Z" },
+    { amount: 150000, paymentType: null, paymentMethod: "CARD", paymentDate: "2026-10-06T09:00:00Z" },
+    { amount: 100000, paymentType: "CURRICULUM", paymentMethod: "CASH", paymentDate: "2026-10-07T09:00:00Z" },
+    { amount: 50000, paymentType: "REFUND", paymentMethod: "CASH", paymentDate: "2026-10-08T09:00:00Z" },
+    { amount: 999, paymentType: "TUITION", paymentMethod: "CASH", paymentDate: "2026-09-30T09:00:00Z" }
+  ];
+  const october = (m) => m === "2026-10";
+  const income = incomeBreakdown(payments, october);
+
+  assert.deepEqual(income, { cash: 200000, card: 150000, unknown: 0, curriculum: 100000, refunds: 50000 });
+  const [summary] = monthlySummary({ payments: payments.slice(0, 4), salaries: [], expenses: [] });
+  assert.equal(income.cash + income.card + income.unknown + income.curriculum - income.refunds, summary.income);
 });

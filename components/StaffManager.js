@@ -44,10 +44,16 @@ export default function StaffManager() {
   const [staff, setStaff] = useState([]);
   const [editing, setEditing] = useState(null); // null | "new" | staff id
   const [error, setError] = useState("");
+  // Former staff (every one after a new school year) are hidden until asked for.
+  const [showInactive, setShowInactive] = useState(false);
+  // An earlier year chosen in the header: everyone who worked then.
+  const [pastYear, setPastYear] = useState(null);
 
   async function load() {
     try {
-      setStaff((await send("/api/staff", "GET")).staff);
+      const data = await send("/api/staff", "GET");
+      setStaff(data.staff);
+      setPastYear(data.pastYear);
       setError("");
     } catch (err) {
       setError(err.message);
@@ -64,6 +70,8 @@ export default function StaffManager() {
   const saved = () => { setEditing(null); load(); };
   const active = staff.filter((s) => s.isActive);
   const total = (field) => active.reduce((sum, s) => sum + (s[field] || 0), 0);
+  const shown = showInactive || pastYear ? staff : active;
+  const inactiveCount = pastYear ? 0 : staff.length - active.length;
   const jobs = [...new Set([...JOB_SUGGESTIONS, ...staff.map((s) => s.job).filter(Boolean)])];
 
   return (
@@ -80,6 +88,12 @@ export default function StaffManager() {
         >
           + موظف جديد
         </button>
+      )}
+      {inactiveCount > 0 && (
+        <label style={{ marginInlineStart: "14px", color: "#475569" }}>
+          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />{" "}
+          عرض غير النشطين ({inactiveCount})
+        </label>
       )}
 
       <div style={{ backgroundColor: "#ffffff", borderRadius: "12px", overflowX: "auto" }}>
@@ -100,7 +114,7 @@ export default function StaffManager() {
             </tr>
           </thead>
           <tbody>
-            {staff.map((person, index) => (
+            {shown.map((person, index) => (
                 <tr key={person.id} style={{ opacity: person.isActive ? 1 : 0.55 }}>
                   <td style={cell}>{index + 1}</td>
                   <td style={cell} title={person.notes || undefined}>
@@ -125,7 +139,7 @@ export default function StaffManager() {
                   </td>
                 </tr>
             ))}
-            {staff.length === 0 && (
+            {shown.length === 0 && (
               <tr><td colSpan={11} style={{ ...cell, color: "#64748b" }}>لا يوجد موظفون بعد.</td></tr>
             )}
           </tbody>

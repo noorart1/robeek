@@ -9,6 +9,7 @@ import {
   loadStudent,
   studentSelect
 } from "../../../lib/student-data";
+import { studentView, yearView } from "../../../lib/year-view";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,13 +43,13 @@ export async function GET() {
       return jsonError("ليس لديك صلاحية الوصول.", 401);
     }
 
-    const students = await prisma.student.findMany({
-      select: studentSelect,
-      orderBy: { id: "asc" }
-    });
+    const [students, view] = await Promise.all([
+      prisma.student.findMany({ select: studentSelect, orderBy: { id: "asc" } }),
+      yearView()
+    ]);
 
     return Response.json(
-      { students: students.map(formatStudent) },
+      { students: students.map((s) => formatStudent(s, studentView(view))) },
       { headers: { "Cache-Control": "no-store" } }
     );
 
@@ -202,7 +203,7 @@ export async function POST(request) {
 
     const result = await prisma.$transaction(async (tx) => {
       const cls = enrollment
-        ? await tx.class.findUnique({ where: { id: enrollment.classId }, include: { AcademicYear: { select: { name: true } } } })
+        ? await tx.class.findUnique({ where: { id: enrollment.classId }, include: { AcademicYear: { select: { name: true, isActive: true } } } })
         : null;
 
       if (enrollment && !cls) {
@@ -213,6 +214,8 @@ export async function POST(request) {
         data: {
           ...data,
           studentCode: data.studentCode || (await nextStudentCode(tx, cls)),
+          // Added to a year that is over: not here now.
+          ...(cls && !cls.AcademicYear.isActive && { status: "INACTIVE" }),
           updatedAt: new Date()
         },
         select: { id: true }

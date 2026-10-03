@@ -34,6 +34,7 @@ export default async function SalaryReceiptPage({ params }) {
   const { Staff: person, ...rest } = record.Salary;
   const salary = formatSalary(rest);
   const refund = payment.paymentType === "REFUND";
+  const bonus = payment.paymentType === "BONUS";
 
   return (
     <>
@@ -47,7 +48,7 @@ export default async function SalaryReceiptPage({ params }) {
         </div>
       </div>
 
-      <ReceiptFrame title={refund ? "وصل قبض" : "وصل صرف راتب"} number={payment.receiptNo || "—"}>
+      <ReceiptFrame title={refund ? "وصل قبض" : bonus ? "وصل صرف مكافأة" : "وصل صرف راتب"} number={payment.receiptNo || "—"}>
         <section className="receipt-body" style={{ marginTop: "14px", fontSize: "16px" }}>
           <div className="receipt-row" style={row}>
             <span style={key}>التاريخ:</span>
@@ -69,7 +70,7 @@ export default async function SalaryReceiptPage({ params }) {
           <div className="receipt-row" style={row}>
             <span style={key}>وذلك عن:</span>
             <span>
-              {refund ? "استرجاع من راتب شهر" : "راتب شهر"} <span dir="ltr">{salary.month}</span>
+              {refund ? "استرجاع من راتب شهر" : bonus ? "مكافأة شهر" : "راتب شهر"} <span dir="ltr">{salary.month}</span>
               {payment.description ? ` — ${payment.description}` : ""}
             </span>
           </div>

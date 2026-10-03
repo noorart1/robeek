@@ -3,20 +3,37 @@ import prisma from "../../../lib/prisma";
 import { getCurrentUser } from "../../../lib/auth";
 import { errorResponse, readBody } from "../../../lib/users";
 import { checkStaff, formatStaff, payChange } from "../../../lib/staff";
+import { yearMonths } from "../../../lib/finance";
+import { yearView } from "../../../lib/year-view";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // الكادر: list (GET) and add (POST) staff. Admins only — it holds salaries.
+// For an earlier year chosen in the header, GET lists who worked then:
+// paid a salary in its months, or heading one of its sections.
 
 export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user || user.role !== "ADMIN") return errorResponse("ليس لديك صلاحية الوصول.", 401);
 
-    const staff = await prisma.staff.findMany({ orderBy: [{ isActive: "desc" }, { id: "asc" }] });
+    const { year, isActive } = await yearView();
+    const months = !isActive && yearMonths(year.name);
+    const staff = await prisma.staff.findMany({
+      where: isActive ? undefined : {
+        OR: [
+          ...(months ? [{ Salary: { some: { month: { gte: months.from, lte: months.to } } } }] : []),
+          { Class: { some: { academicYearId: year.id } } }
+        ]
+      },
+      orderBy: [{ isActive: "desc" }, { id: "asc" }]
+    });
 
-    return Response.json({ staff: staff.map(formatStaff) }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json(
+      { staff: staff.map(formatStaff), pastYear: isActive ? null : year.name },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     console.error("Staff GET error:", error);
     return errorResponse("حدث خطأ أثناء تحميل الكادر.", 500);
