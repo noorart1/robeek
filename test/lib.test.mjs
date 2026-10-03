@@ -375,3 +375,31 @@ test("income breakdown: tuition by method, curriculum, refunds; matches the summ
   const [summary] = monthlySummary({ payments: payments.slice(0, 4), salaries: [], expenses: [] });
   assert.equal(income.cash + income.card + income.unknown + income.curriculum - income.refunds, summary.income);
 });
+
+test("amounts typed with Arabic or Persian digits are read as numbers", async () => {
+  const { parseAmount } = await import("../lib/digits.js");
+
+  assert.equal(parseAmount("١٬٦٠٠٬٠٠٠"), 1600000);
+  assert.equal(parseAmount("۱۶۰۰۰۰۰"), 1600000);
+  assert.equal(parseAmount("1,600,000"), 1600000);
+  assert.equal(parseAmount(" ٢٥٠ ٠٠٠ "), 250000);
+  assert.equal(parseAmount("١٢٫٥"), 12.5);
+  assert.equal(parseAmount(750000), 750000);
+  // Not a number, or one the database would round: refused, never guessed.
+  for (const bad of ["", "abc", "-5", "1.600.000", "12.345", "1e6", "١٢x"]) {
+    assert.equal(parseAmount(bad), null, bad);
+  }
+});
+
+test("every money input goes through parseAmount", async () => {
+  const { validateEnrollment } = await import("../lib/enrollment-fields.js");
+  const { checkSalaryPayment, checkSalary } = await import("../lib/staff.js");
+  const { checkExpense } = await import("../lib/finance.js");
+
+  assert.equal(validateEnrollment({ classId: 1, tuitionFee: "١٬٤٠٠٬٠٠٠" }).data.tuitionFee, 1400000);
+  assert.equal(validateEnrollment({ classId: 1, tuitionFee: "١.٤.٠" }).field, "tuitionFee");
+  assert.equal(checkSalaryPayment({ staffId: 1, month: "2026-10", amount: "۸۳۵٬۰۰۰" }).data.amount, 835000);
+  assert.equal(checkSalaryPayment({ staffId: 1, month: "2026-10", amount: "٠" }).field, "amount");
+  assert.equal(checkSalary({ staffId: 1, month: "2026-10", baseSalary: "٩٠٠٠٠٠", deduction: "٥٠٬٠٠٠" }).data.deduction, 50000);
+  assert.equal(checkExpense({ date: "٢٠٢٦-١٠-٠٥", item: "ماء", amount: "١٢٬٠٠٠", category: "GENERAL" }).data.amount, 12000);
+});
