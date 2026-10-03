@@ -375,7 +375,8 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
   `scripts/reset-data.js` empties a year that was started before this
   (2026-2027).
 - **Every page shows one school year**, chosen in the header (admins
-  only; `components/YearPicker.js`), kept in the `year` cookie, the active
+  only; `components/YearPicker.js`), kept in the `robeek_year` session cookie (set and cleared only by
+  `/dashboard/year`), the active
   one by default; `/dashboard/year?id=…&to=…` sets it from a link. Server
   code reads it with `yearView()` (`lib/year-view.js`) — never the cookie
   directly — and passes `studentView(view)` to `formatStudent`, so a
