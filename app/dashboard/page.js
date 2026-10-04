@@ -47,7 +47,7 @@ export default async function DashboardPage() {
     _count: { select: { Enrollment: { where: here } } }
   };
 
-  const [classes, summerClasses, activeStudents, needsReview, totalParents, todayRecords, pastYears, staff] =
+  const [classes, summerClasses, activeStudents, inactiveStudents, needsReview, totalParents, todayRecords, pastYears, staff] =
     await Promise.all([
       prisma.class.findMany({
         where: year ? { academicYearId: year.id } : undefined,
@@ -69,6 +69,8 @@ export default async function DashboardPage() {
         ? prisma.class.findMany({ where: { academicYearId: summer.id }, select: sectionSelect, orderBy: [{ shift: "desc" }, { name: "asc" }] })
         : [],
       prisma.student.count({ where: inYear }),
+      // The running year's children who have left (enrolled, not ACTIVE).
+      isActive ? prisma.student.count({ where: { status: { not: "ACTIVE" }, Enrollment: { some: { academicYearId: year?.id ?? -1 } } } }) : 0,
       prisma.student.count({ where: { ...inYear, reviewNote: { not: null } } }),
       // Parents of this year's children; the others stay with earlier years.
       prisma.parent.count({ where: { StudentParent: { some: { Student: inYear } } } }),
@@ -112,6 +114,7 @@ export default async function DashboardPage() {
 
   const stats = [
     [isActive ? "الأطفال النشطون" : "أطفال السنة", activeStudents],
+    ...(isActive ? [["الأطفال غير النشطين", inactiveStudents]] : []),
     ["أولياء الأمور", totalParents],
     ["بحاجة إلى مراجعة", needsReview, "/dashboard/students?review=1"]
   ];
