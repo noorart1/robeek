@@ -1,9 +1,10 @@
 
 import prisma from "../../../lib/prisma";
 import { requirePageUser } from "../../../lib/auth";
+import { FINANCE_TABS, canFinance } from "../../../lib/finance-access";
 import { SHIFTS, classLabel, formatMoney, summerYearName, yearLabel } from "../../../lib/labels";
 import { formatStudent, overdueViews, studentSelect } from "../../../lib/student-data";
-import { PARTNERS, incomeBreakdown, monthlySummary, paidTotals, yearMonths } from "../../../lib/finance";
+import { PARTNERS, incomeBreakdown, isHandover, monthlySummary, paidTotals, yearMonths } from "../../../lib/finance";
 import { matchesSearch } from "../../../lib/arabic";
 import { salaryAmount } from "../../../lib/staff";
 import { iraqToday } from "../../../lib/dates";
@@ -19,14 +20,9 @@ const dayMonth = (date) => new Date(date).toISOString().slice(0, 7);
 
 // Each tab holds only its own ledger: the two expense tabs, and the box
 // tab with الإيرادات والأرباح, الصندوق, الحصص and the money moving in and
-// out of them.
-const TABS = {
-  summary: "الملخص",
-  salaries: "رواتب الموظفين",
-  general: "مصاريف عامة",
-  fixed: "مصاريف ثابتة",
-  box: "الصندوق والشركاء"
-};
+// out of them. A معاون sees only the tabs given to them
+// (lib/finance-access.js), read-only unless also allowed to change them.
+const TABS = FINANCE_TABS;
 const BOARD = { general: "GENERAL", fixed: "ASSET" };
 
 // The chosen month (?month) goes with every tab; the year is the header's.
@@ -34,13 +30,13 @@ const keep = (params) => ({
   ...(params.month && { month: params.month })
 });
 
-function Tabs({ tab, params }) {
+function Tabs({ tab, tabs, params }) {
   return (
     <nav style={{ display: "flex", gap: "6px", marginBottom: "16px", borderBottom: "1px solid #e2e8f0" }}>
-      {Object.entries(TABS).map(([key, label]) => (
+      {tabs.map((key) => [key, TABS[key]]).map(([key, label]) => (
         <Link
           key={key}
-          href={`/dashboard/finance?${new URLSearchParams({ ...(key !== "summary" && { tab: key }), ...keep(params) })}`}
+          href={`/dashboard/finance?${new URLSearchParams({ ...(key !== tabs[0] && { tab: key }), ...keep(params) })}`}
           aria-current={tab === key ? "page" : undefined}
           style={{
             padding: "8px 16px",
@@ -54,6 +50,14 @@ function Tabs({ tab, params }) {
         </Link>
       ))}
     </nav>
+  );
+}
+
+function ReadOnlyNote() {
+  return (
+    <p role="status" style={{ padding: "8px 14px", backgroundColor: "#f1f5f9", color: "#475569", borderRadius: "8px", marginTop: 0 }}>
+      للاطلاع فقط: لا يمكنك التعديل في هذا القسم.
+    </p>
   );
 }
 
@@ -102,10 +106,25 @@ function Row({ label, totals, strong, remaining = totals.fee - totals.paid }) {
 }
 
 export default async function FinancePage({ searchParams }) {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
   const params = await searchParams;
+  const tabs = Object.keys(TABS).filter((key) => canFinance(user, key));
   // ?tab=expenses was the one ledger tab before it was split.
-  const tab = params.tab === "expenses" ? "general" : params.tab in TABS ? params.tab : "summary";
+  const asked = params.tab === "expenses" ? "general" : params.tab;
+  const tab = tabs.includes(asked) ? asked : tabs[0];
+  const readOnly = !canFinance(user, tab, true);
+
+  if (!tab) {
+    return (
+      <>
+        <AppHeader user={user} active="/dashboard/finance" />
+        <main style={{ maxWidth: "1200px", margin: "24px auto", padding: "0 20px" }}>
+          <h1 style={{ color: "#1e40af" }}>الملف المالي والأرصدة</h1>
+          <p style={{ color: "#64748b" }}>لم تُمنح صلاحية أي قسم من المالية بعد. اطلبها من المدير.</p>
+        </main>
+      </>
+    );
+  }
 
   // The school year chosen in the header (lib/year-view.js). School years
   // only: a summer course belongs to the year it ends.
@@ -124,8 +143,11 @@ export default async function FinancePage({ searchParams }) {
         <AppHeader user={user} active="/dashboard/finance" />
         <main style={{ maxWidth: "1440px", margin: "24px auto", padding: "0 20px" }}>
           <h1 style={{ color: "#1e40af", marginBottom: "12px" }}>الملف المالي والأرصدة</h1>
-          <Tabs tab={tab} params={params} />
-          {tab === "salaries" ? <SalariesBoard defaultMonth={defaultMonth} /> : <ExpensesBoard key={tab} kind={BOARD[tab]} defaultMonth={defaultMonth} />}
+          <Tabs tab={tab} tabs={tabs} params={params} />
+          {readOnly && <ReadOnlyNote />}
+          {tab === "salaries"
+            ? <SalariesBoard defaultMonth={defaultMonth} readOnly={readOnly} staffEditable={user.role === "ADMIN"} />
+            : <ExpensesBoard key={tab} kind={BOARD[tab]} defaultMonth={defaultMonth} readOnly={readOnly} />}
         </main>
       </>
     );
@@ -163,26 +185,21 @@ export default async function FinancePage({ searchParams }) {
     ["expenses", "مصاريف عامة"],
     ["assets", "مصاريف ثابتة"],
     ["net", "الصافي"],
-    ["handovers", "تسليم الإدارة"],
+    ["handovers", "تسليم الخزينة"],
     ["withdrawals", "سحب الشركاء"]
   ];
   const monthTotal = (key) => months.reduce((sum, m) => sum + m[key], 0);
 
-  // الصندوق وحصص الشركاء, as the workbook's «الرئيسية» worked them out:
-  // what is not handed to the management stays in the centre's box; the
-  // management's box is what it received less the partners' draws; each
-  // partner is due their share of the net and has drawn so much.
+  // الصندوق وحصص الشركاء: صافي الربح = الإيرادات − المصروفات. Money moves
+  // twice: from صندوق المركز to الخزينة (تسليم الخزينة), and from الخزينة
+  // to the partners (سحب …). So صندوق المركز = صافي الربح − تسليم الخزينة,
+  // and الخزينة = تسليم الخزينة − سحب الشركاء. Each partner is due their
+  // share of the net.
   const net = monthTotal("net");
   const handovers = monthTotal("handovers");
-  // Of which hand-entered before تسليم الإدارة came from the receipts.
-  const manualHandovers = allExpenses
-    .filter((e) => e.category === "HANDOVER" && (!range || (dayMonth(e.date) >= range.from && dayMonth(e.date) <= range.to)))
-    .reduce((t, e) => t + Number(e.amount), 0);
+  const inRange = (e) => !range || (dayMonth(e.date) >= range.from && dayMonth(e.date) <= range.to);
   const withdrawals = monthTotal("withdrawals");
-  const draws = allExpenses.filter(
-    (e) => e.category === "WITHDRAWAL" &&
-      (!range || (dayMonth(e.date) >= range.from && dayMonth(e.date) <= range.to))
-  );
+  const draws = allExpenses.filter((e) => e.category === "WITHDRAWAL" && !isHandover(e) && inRange(e));
   const partners = PARTNERS.map((p) => {
     const taken = draws.filter((e) => matchesSearch(e.item, p.name)).reduce((t, e) => t + Number(e.amount), 0);
     return { ...p, due: net * p.share, taken, left: net * p.share - taken };
@@ -283,7 +300,8 @@ export default async function FinancePage({ searchParams }) {
           <span style={{ marginInlineStart: "auto" }}>المبالغ بالدينار العراقي</span>
         </div>
 
-        <Tabs tab={tab} params={params} />
+        <Tabs tab={tab} tabs={tabs} params={params} />
+        {readOnly && tab === "box" && <ReadOnlyNote />}
 
         {tab === "summary" && (<>
         {(
@@ -349,7 +367,7 @@ export default async function FinancePage({ searchParams }) {
         <p style={{ color: "#64748b", marginTop: 0, fontSize: "13px" }}>
           {range && <>من <span dir="ltr">{range.from}</span> إلى <span dir="ltr">{range.to}</span>. </>}
           الوارد حسب تاريخ الوصل (أقساط ومنهج، بدون الملغاة)؛ الرواتب حسب تاريخ دفعها (بدون الملغاة؛ المنقولة بلا تاريخ حسب شهرها)؛ الصافي = الوارد + وارد آخر − الاسترجاع − رواتب الموظفين − مصاريف عامة − مصاريف ثابتة.
-          تسليم الإدارة وسحب الشركاء لا يُطرحان من الصافي.
+          تسليم الخزينة وسحب الشركاء لا يُطرحان من الصافي.
           {showUnknown && " «غير محدد»: دفعات سُجّلت قبل إضافة نوع الدفع."}
         </p>
 
@@ -400,7 +418,7 @@ export default async function FinancePage({ searchParams }) {
             ["المصروفات", -(monthTotal("salaries") + monthTotal("expenses") + monthTotal("assets")), "#b91c1c"],
             ["صافي الربح", net, "#1d4ed8", true],
             ["صندوق المركز", net - handovers, "#0f766e"],
-            ["صندوق الإدارة", handovers - withdrawals, "#7c3aed"]
+            ["الخزينة", handovers - withdrawals, "#7c3aed"]
           ].map(([label, value, color, main]) => (
             <div key={label} style={{ ...panel, borderTop: `4px solid ${color}`, ...(main && { backgroundColor: "#eff6ff" }) }}>
               <div style={{ color: "#64748b", fontSize: "14px" }}>{label}</div>
@@ -443,16 +461,13 @@ export default async function FinancePage({ searchParams }) {
           </section>
 
           <section style={panel}>
-            <h2 style={panelTitle}>الصندوق</h2>
+            <h2 style={panelTitle}>الخزينة</h2>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <tbody>
                 {[
-                  ["صافي الربح", net],
-                  ["التسليم إلى الإدارة (تلقائي: النقدي والمنهج والزي)", manualHandovers - handovers],
-                  ...(manualHandovers ? [["التسليم إلى الإدارة (مسجل يدوياً سابقاً)", -manualHandovers]] : []),
-                  ["صندوق المركز", net - handovers, true],
+                  ["الدفعات المستلمة", handovers],
                   ["سحب الشركاء", -withdrawals],
-                  ["صندوق الإدارة", handovers - withdrawals, true]
+                  ["الباقي", handovers - withdrawals, true]
                 ].map(([label, value, strong]) => (
                   <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
                     <td style={{ ...cell, whiteSpace: "normal" }}>{label}</td>
@@ -462,7 +477,7 @@ export default async function FinancePage({ searchParams }) {
               </tbody>
             </table>
             <p style={{ color: "#64748b", fontSize: "13px", margin: "10px 0 0" }}>
-              صندوق المركز = صافي الربح − التسليم. صندوق الإدارة = التسليم − سحب الشركاء.
+              الخزينة = الدفعات المستلمة − سحب الشركاء = الباقي.
             </p>
           </section>
         </div>
@@ -505,7 +520,7 @@ export default async function FinancePage({ searchParams }) {
 
         <section style={panel}>
           <h2 style={panelTitle}>الحركات</h2>
-          <ExpensesBoard kind="BOX" defaultMonth={defaultMonth} />
+          <ExpensesBoard kind="BOX" defaultMonth={defaultMonth} readOnly={readOnly} />
         </section>
         </>)}
       </main>

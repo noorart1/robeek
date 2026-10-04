@@ -2,6 +2,8 @@
 import Link from "next/link";
 import prisma from "../../../../lib/prisma";
 import { requirePageUser } from "../../../../lib/auth";
+import { canFinance } from "../../../../lib/finance-access";
+import { redirect } from "next/navigation";
 import { formatDate } from "../../../../lib/arabic";
 import { iraqToday } from "../../../../lib/dates";
 import { PAYMENT_PLANS, SHIFTS, classLabel, formatMoney, fullName } from "../../../../lib/labels";
@@ -64,7 +66,9 @@ const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums" }
 // both the school year and the summer course has a row for each. For an
 // earlier year chosen in the header: everyone enrolled in it, for it.
 export default async function OverduePage({ searchParams }) {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
+  // A معاون: only with «الملخص» in المالية.
+  if (!canFinance(user, "summary")) redirect("/dashboard/finance");
   const { shift = "" } = await searchParams;
 
   const view = await yearView();

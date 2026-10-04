@@ -3,15 +3,17 @@ import Link from "next/link";
 import prisma from "../lib/prisma";
 import { yearView } from "../lib/year-view";
 import LogoutButton from "./LogoutButton";
+import { ROLE_HOME } from "../lib/auth";
 import YearPicker, { BackToActiveYear } from "./YearPicker";
 
-// Teachers see attendance only; the pages themselves enforce the same.
+// Teachers see attendance only, a معاون المالية only; the pages
+// themselves enforce the same.
 const links = [
   { href: "/dashboard", label: "الرئيسية", roles: ["ADMIN"] },
   { href: "/dashboard/students", label: "الأطفال", roles: ["ADMIN"] },
   { href: "/dashboard/attendance", label: "الحضور", roles: ["ADMIN", "TEACHER"] },
   { href: "/dashboard/staff", label: "الكادر", roles: ["ADMIN"] },
-  { href: "/dashboard/finance", label: "المالية", roles: ["ADMIN"] },
+  { href: "/dashboard/finance", label: "المالية", roles: ["ADMIN", "DEPUTY"] },
   { href: "/dashboard/lines", label: "الخطوط", roles: ["ADMIN"] },
   { href: "/dashboard/users", label: "المستخدمون", roles: ["ADMIN"] },
   { href: "/dashboard/backups", label: "النسخ الاحتياطي", roles: ["ADMIN"] }
@@ -44,7 +46,7 @@ export default async function AppHeader({ user, active }) {
       }}
     >
       <Link
-        href={user.role === "TEACHER" ? "/dashboard/attendance" : "/dashboard"}
+        href={ROLE_HOME[user.role] ?? "/dashboard"}
         style={{
           display: "flex",
           alignItems: "center",

@@ -1,6 +1,6 @@
 
 import prisma from "../../../../../lib/prisma";
-import { requireAdmin } from "../../../../../lib/auth";
+import { requireFinance } from "../../../../../lib/auth";
 import { errorResponse, readBody } from "../../../../../lib/users";
 import { salaryPaid } from "../../../../../lib/staff";
 
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries", true);
     if (response) return response;
 
     const id = Number((await params).id);

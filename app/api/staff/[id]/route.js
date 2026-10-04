@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { requireAdmin } from "../../../../lib/auth";
+import { requireAdmin, requireFinance } from "../../../../lib/auth";
 import { errorResponse, readBody, renameStaff } from "../../../../lib/users";
 import { checkStaff, formatSalary, formatSalaryPayment, formatStaff, netSalary, payChange, salaryPaid } from "../../../../lib/staff";
 import { iraqToday } from "../../../../lib/dates";
@@ -19,7 +19,8 @@ async function staffId(params) {
 
 export async function GET(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    // Also a معاون given رواتب الموظفين: the person's window there.
+    const { user, response } = await requireFinance("salaries");
     if (response) return response;
 
     const id = await staffId(params);

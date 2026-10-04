@@ -1,6 +1,6 @@
 
 import prisma from "../../../lib/prisma";
-import { requireAdmin } from "../../../lib/auth";
+import { requireFinance } from "../../../lib/auth";
 import { errorResponse, readBody } from "../../../lib/users";
 import { checkSalary, formatSalary, formatStaff, isMonth, netSalary, payChange, salaryPaid } from "../../../lib/staff";
 import { formatExpense } from "../../../lib/finance";
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries");
     if (response) return response;
 
     const month = new URL(request.url).searchParams.get("month");
@@ -49,7 +49,7 @@ export async function GET(request) {
 
 export async function PUT(request) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries", true);
     if (response) return response;
 
     const body = await readBody(request);

@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { requireAdmin } from "../../../../lib/auth";
+import { requireFinance } from "../../../../lib/auth";
 import { errorResponse, readBody } from "../../../../lib/users";
 import { iraqToday, parseDay } from "../../../../lib/dates";
 import { checkSalaryPayment, formatSalaryPayment, netSalary, salaryPaid } from "../../../../lib/staff";
@@ -23,7 +23,7 @@ async function nextReceiptNo(tx) {
 
 export async function POST(request) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries", true);
     if (response) return response;
 
     const body = await readBody(request);

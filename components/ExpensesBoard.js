@@ -7,7 +7,7 @@ import { useUrlMonth } from "./url-month";
 import { formatDate } from "../lib/arabic";
 import { iraqToday } from "../lib/dates";
 import { PAYMENT_METHODS, formatMoney } from "../lib/labels";
-import { EXPENSE_CATEGORIES, EXPENSE_ITEMS, PARTNERS } from "../lib/finance";
+import { EXPENSE_CATEGORIES, EXPENSE_ITEMS, PARTNERS, isHandover } from "../lib/finance";
 
 // One ledger board per finance tab, each with only its own categories:
 // the two expense tabs look alike and need no category picker; the box
@@ -16,14 +16,14 @@ import { EXPENSE_CATEGORIES, EXPENSE_ITEMS, PARTNERS } from "../lib/finance";
 const BOARDS = {
   GENERAL: { categories: ["GENERAL"], items: ["الكهرباء", "ماء", "انترنت", ...EXPENSE_ITEMS], noun: "مصروف", empty: "لا توجد مصاريف عامة في هذا الشهر." },
   ASSET: { categories: ["ASSET"], items: ["رسوم ادارية", "العاب وديكور", "تطوير", "اجهزة"], noun: "مصروف ثابت", empty: "لا توجد مصاريف ثابتة في هذا الشهر." },
-  // تسليم الإدارة is worked out from the receipts now, and وارد آخر is no
+  // تسليم الخزينة is worked out from the receipts now, and وارد آخر is no
   // longer entered: their old rows are listed (and editable) but no new
-  // ones are added, so a new movement is always سحب الشركاء.
+  // ones are added, so a new movement is always سحب الشركاء (from الخزينة).
   BOX: {
     categories: ["WITHDRAWAL", "INCOME", "HANDOVER"],
     legacy: ["INCOME", "HANDOVER"],
     // A fixed list, nothing typed by hand (older rows keep their item).
-    items: [...PARTNERS.map((p) => `سحب ${p.name}`), "تسليم ابوحسن"],
+    items: PARTNERS.map((p) => `سحب ${p.name}`),
     fixedItems: true,
     // The list can be narrowed to one البند.
     itemFilter: true,
@@ -45,8 +45,9 @@ const blank = (month, category) => ({
 });
 
 // kind GENERAL, ASSET or BOX: that ledger for one month, added to,
-// corrected or removed here.
-export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
+// corrected or removed here — or only listed (readOnly: a معاون who may
+// see the tab but not change it).
+export default function ExpensesBoard({ kind = "GENERAL", defaultMonth, readOnly = false }) {
   const board = BOARDS[kind];
   const [month, setMonth] = useUrlMonth(defaultMonth);
   const [expenses, setExpenses] = useState(null);
@@ -131,8 +132,10 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
   const shown = (expenses ?? []).filter((e) => !itemFilter.length || itemFilter.includes(e.item));
   const toggleItem = (item) =>
     setItemFilter((f) => (f.includes(item) ? f.filter((i) => i !== item) : [...f, item]));
+  // «تسليم الخزينة» rows are stored as WITHDRAWAL but are a handover.
+  const kindOf = (e) => (isHandover(e) ? "HANDOVER" : e.category);
   const sum = (category) =>
-    shown.filter((e) => !category || e.category === category).reduce((t, e) => t + e.amount, 0);
+    shown.filter((e) => !category || kindOf(e) === category).reduce((t, e) => t + e.amount, 0);
 
   return (
     <>
@@ -141,7 +144,7 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
         <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} style={control} />
       </label>
 
-      <form
+      {!readOnly && <form
         onSubmit={save}
         onKeyDown={(e) => { if (e.key === "Escape" && editingId) { e.preventDefault(); reset(); } }}
         style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", padding: "12px", backgroundColor: "#ffffff", borderRadius: "12px", marginBottom: "12px" }}
@@ -180,7 +183,8 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
         <button type="submit" disabled={busy}>{busy ? "جارٍ الحفظ..." : editingId ? "حفظ" : "+ إضافة"}</button>
         {editingId && <button type="button" onClick={reset}>إلغاء</button>}
         {error && <p role="alert" style={{ color: "#dc2626", margin: 0, width: "100%" }}>{error.message}</p>}
-      </form>
+      </form>}
+      {readOnly && error && <p role="alert" style={{ color: "#dc2626" }}>{error.message}</p>}
 
       {itemFilter.length > 0 && (
         // The ticked items, each removable with ✕.
@@ -246,7 +250,7 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
                 <th style={cell}>نوع الدفع</th>
                 <th style={money}>المبلغ</th>
                 <th style={cell}>ملاحظات</th>
-                <th style={cell} />
+                {!readOnly && <th style={cell} />}
               </tr>
             </thead>
             <tbody>
@@ -254,14 +258,16 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
                 <tr key={e.id} style={{ backgroundColor: editingId === e.id ? "#fef9c3" : undefined }}>
                   <td style={cell}>{formatDate(e.date)}</td>
                   <td style={cell}>{e.item}</td>
-                  {kinds && <td style={cell}>{EXPENSE_CATEGORIES[e.category]}</td>}
+                  {kinds && <td style={cell}>{EXPENSE_CATEGORIES[kindOf(e)]}</td>}
                   <td style={cell}>{PAYMENT_METHODS[e.paymentMethod] || "—"}</td>
                   <td style={money}>{formatMoney(e.amount)}</td>
                   <td style={{ ...cell, maxWidth: "280px", overflow: "hidden", textOverflow: "ellipsis" }} title={e.notes || undefined}>{e.notes}</td>
-                  <td style={cell}>
-                    <button type="button" onClick={() => edit(e)}>✎ تعديل</button>{" "}
-                    <button type="button" onClick={() => remove(e)} style={{ color: "#b91c1c" }}>حذف</button>
-                  </td>
+                  {!readOnly && (
+                    <td style={cell}>
+                      <button type="button" onClick={() => edit(e)}>✎ تعديل</button>{" "}
+                      <button type="button" onClick={() => remove(e)} style={{ color: "#b91c1c" }}>حذف</button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {shown.length === 0 && (
@@ -275,7 +281,8 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth }) {
                 <tr key={category} style={{ fontWeight: "bold", backgroundColor: "#f8fafc" }}>
                   <td style={cell} colSpan={4}>
                     {EXPENSE_CATEGORIES[category]}
-                    {board.legacy?.includes(category) && <small style={{ fontWeight: "normal", color: "#64748b" }}> (المسجل يدوياً سابقاً)</small>}
+                    {/* تسليم الخزينة is still entered, as «تسليم الخزينة» rows. */}
+                    {board.legacy?.includes(category) && category !== "HANDOVER" && <small style={{ fontWeight: "normal", color: "#64748b" }}> (المسجل يدوياً سابقاً)</small>}
                   </td>
                   <td style={money}>{formatMoney(sum(category))}</td>
                   <td style={cell} colSpan={2} />

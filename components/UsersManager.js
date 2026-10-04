@@ -4,8 +4,15 @@
 import { useEffect, useState } from "react";
 import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 import { SHIFTS, classLabel } from "../lib/labels";
+import { ACCESS_LEVELS, FINANCE_TABS } from "../lib/finance-access";
 
-const ROLE_LABELS = { ADMIN: "مدير", TEACHER: "مرشدة" };
+const ROLE_LABELS = { ADMIN: "مدير", DEPUTY: "معاون", TEACHER: "مرشدة" };
+
+// A معاون's tabs, one line: «الملخص (قراءة فقط)، رواتب الموظفين».
+const accessSummary = (access) =>
+  Object.entries(access)
+    .map(([tab, level]) => `${FINANCE_TABS[tab]}${level === "READ" ? " (قراءة فقط)" : ""}`)
+    .join("، ");
 
 // 14 characters without look-alikes (0/O, 1/l/I), so it can be read out
 // or written down for a teacher without mistakes.
@@ -77,7 +84,7 @@ export default function UsersManager() {
     <main style={{ maxWidth: "1000px", margin: "24px auto", padding: "0 20px" }}>
       <h1 style={{ color: "#1e40af", marginBottom: "4px" }}>المستخدمون</h1>
       <p style={{ color: "#64748b", marginTop: 0 }}>
-        المرشدة ترى صفحة الحضور فقط، ولشعبها فقط. المدير يرى كل شيء.
+        المرشدة ترى صفحة الحضور فقط، ولشعبها فقط. المعاون يرى من المالية ما يحدده له المدير فقط. المدير يرى كل شيء.
       </p>
 
       {error && <p role="alert" style={{ color: "#dc2626" }}>{error}</p>}
@@ -104,7 +111,7 @@ export default function UsersManager() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
-              {["الاسم", "اسم المستخدم", "الصلاحية", "الشعب", "الحالة", ""].map((h) => (
+              {["الاسم", "اسم المستخدم", "الصلاحية", "الشعب / المالية", "الحالة", ""].map((h) => (
                 <th key={h} style={cell}>{h}</th>
               ))}
             </tr>
@@ -138,7 +145,9 @@ export default function UsersManager() {
                       ? user.classes.length
                         ? user.classes.map(classLabel).join("، ")
                         : <span style={{ color: "#b45309" }}>لا توجد شعبة</span>
-                      : "كل الشعب"}
+                      : user.role === "DEPUTY"
+                        ? accessSummary(user.financeAccess) || <span style={{ color: "#b45309" }}>لا يوجد قسم</span>
+                        : "كل الشعب"}
                   </td>
                   <td style={cell}>{user.isActive ? "نشط" : "موقوف"}</td>
                   <td style={cell}>
@@ -165,6 +174,7 @@ function UserForm({ user, self = false, classes, staff, users, onCancel, onSaved
     isActive: user?.isActive ?? true,
     classIds: user?.classes.map((c) => c.id) ?? [],
     staffId: user?.staffId ? String(user.staffId) : "",
+    financeAccess: user?.financeAccess ?? {},
     password: ""
   });
   const [busy, setBusy] = useState(false);
@@ -205,11 +215,13 @@ function UserForm({ user, self = false, classes, staff, users, onCancel, onSaved
           password: form.password,
           role: form.role,
           staffId: form.staffId || null,
-          classIds: form.role === "TEACHER" ? form.classIds : []
+          classIds: form.role === "TEACHER" ? form.classIds : [],
+          financeAccess: form.role === "DEPUTY" ? form.financeAccess : {}
         });
       } else {
         const changes = { fullName: form.fullName, role: form.role, isActive: form.isActive, staffId: form.staffId || null };
         if (form.role === "TEACHER") changes.classIds = form.classIds;
+        if (form.role === "DEPUTY") changes.financeAccess = form.financeAccess;
         if (form.password) changes.password = form.password;
         await send(`/api/users/${user.id}`, "PATCH", changes);
       }
@@ -274,6 +286,7 @@ function UserForm({ user, self = false, classes, staff, users, onCancel, onSaved
           الصلاحية
           <select value={form.role} disabled={self} onChange={(e) => set("role", e.target.value)} style={{ ...control, ...border("role") }}>
             <option value="TEACHER">مرشدة — الحضور لشعبها فقط</option>
+            <option value="DEPUTY">معاون — أقسام المالية المحددة فقط</option>
             <option value="ADMIN">مدير — كل الصلاحيات</option>
           </select>
         </label>
@@ -325,6 +338,27 @@ function UserForm({ user, self = false, classes, staff, users, onCancel, onSaved
               ))}
             </div>
           ))}
+        </fieldset>
+      )}
+
+      {form.role === "DEPUTY" && (
+        <fieldset style={{ border: `1px solid ${error?.field === "financeAccess" ? "#dc2626" : "#e2e8f0"}`, borderRadius: "8px", padding: "10px" }}>
+          <legend style={{ color: "#475569", fontSize: "13px" }}>أقسام المالية التي يراها</legend>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "8px 16px" }}>
+            {Object.entries(FINANCE_TABS).map(([tab, tabLabel]) => (
+              <label key={tab} style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+                {tabLabel}
+                <select
+                  value={form.financeAccess[tab] ?? ""}
+                  onChange={(e) => set("financeAccess", { ...form.financeAccess, [tab]: e.target.value || undefined })}
+                  style={{ ...control, padding: "5px 8px" }}
+                >
+                  <option value="">لا يراه</option>
+                  {Object.entries(ACCESS_LEVELS).map(([level, levelLabel]) => <option key={level} value={level}>{levelLabel}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
         </fieldset>
       )}
 

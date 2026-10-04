@@ -286,6 +286,17 @@ test("monthly summary: income by method, refunds and spending by month", async (
     ]
   });
   assert.deepEqual([oct.otherIncome, oct.salaries, oct.handovers, oct.withdrawals, oct.net], [100, 30, 40, 50, 70]);
+  // «تسليم الخزينة» (and the older «تسليم ابوحسن») is a handover, not a draw.
+  const [dec] = monthlySummary({
+    payments: [],
+    salaries: [],
+    expenses: [
+      { date: "2026-12-01", category: "WITHDRAWAL", item: "تسليم الخزينة", amount: 10 },
+      { date: "2026-12-02", category: "WITHDRAWAL", item: "تسليم ابوحسن", amount: 20 },
+      { date: "2026-12-03", category: "WITHDRAWAL", item: "سحب البراق", amount: 30 }
+    ]
+  });
+  assert.deepEqual([dec.handovers, dec.withdrawals, dec.net], [30, 30, 0]);
 
   assert.equal(checkExpense({ date: "2026-09-01", item: "", amount: "5" }).field, "item");
   assert.equal(checkExpense({ date: "2026-09-01", item: "نثريات", amount: "0" }).field, "amount");
@@ -300,6 +311,9 @@ test("monthly summary: income by method, refunds and spending by month", async (
   const handover = { date: "2026-09-06", item: "تسليم الإدارة", amount: "1000", category: "HANDOVER" };
   assert.equal(checkExpense(handover).field, "category");
   assert.equal(checkExpense(handover, "HANDOVER").data.category, "HANDOVER");
+  const named = { date: "2026-10-06", item: "تسليم الخزينة", amount: "1000", category: "WITHDRAWAL" };
+  assert.equal(checkExpense(named).field, "category");
+  assert.equal(checkExpense(named, "WITHDRAWAL").data.item, "تسليم الخزينة");
 });
 
 test("school years: the next one, and the months each covers", async () => {
@@ -402,4 +416,32 @@ test("every money input goes through parseAmount", async () => {
   assert.equal(checkSalaryPayment({ staffId: 1, month: "2026-10", amount: "٠" }).field, "amount");
   assert.equal(checkSalary({ staffId: 1, month: "2026-10", baseSalary: "٩٠٠٠٠٠", deduction: "٥٠٬٠٠٠" }).data.deduction, 50000);
   assert.equal(checkExpense({ date: "٢٠٢٦-١٠-٠٥", item: "ماء", amount: "١٢٬٠٠٠", category: "GENERAL" }).data.amount, 12000);
+});
+
+test("finance access: a معاون sees only the tabs given, writes only where allowed", async () => {
+  const { canFinance, financeLevel, parseFinanceAccess, CATEGORY_TAB } = await import("../lib/finance-access.js");
+
+  const deputy = { role: "DEPUTY", financeAccess: JSON.stringify({ salaries: "WRITE", summary: "READ", bogus: "WRITE", box: "ALL" }) };
+  assert.deepEqual(parseFinanceAccess(deputy.financeAccess), { salaries: "WRITE", summary: "READ" });
+  assert.equal(canFinance(deputy, "salaries", true), true);
+  assert.equal(canFinance(deputy, "summary"), true);
+  assert.equal(canFinance(deputy, "summary", true), false);
+  assert.equal(canFinance(deputy, "box"), false);
+  assert.equal(canFinance({ role: "DEPUTY", financeAccess: "not json" }, "summary"), false);
+  // Admins have everything; teachers nothing, whatever is stored.
+  assert.equal(financeLevel({ role: "ADMIN" }, "box"), "WRITE");
+  assert.equal(canFinance({ role: "TEACHER", financeAccess: deputy.financeAccess }, "summary"), false);
+  // Every Expense category is kept under some tab.
+  const { EXPENSE_CATEGORIES } = await import("../lib/finance.js");
+  assert.deepEqual(Object.keys(EXPENSE_CATEGORIES).sort(), Object.keys(CATEGORY_TAB).sort());
+
+  // What the users page sends: "" (لا يراه) drops the tab, anything unknown is refused.
+  const { checkFinanceAccess } = await import("../lib/finance-access.js");
+  assert.equal(checkFinanceAccess({ summary: "READ", box: "" }).value, '{"summary":"READ"}');
+  assert.equal(checkFinanceAccess({}).value, null);
+  assert.equal(checkFinanceAccess({ summary: "ADMIN" }).field, "financeAccess");
+  assert.equal(checkFinanceAccess({ users: "WRITE" }).field, "financeAccess");
+  assert.equal(checkFinanceAccess(["summary"]).field, "financeAccess");
+  assert.equal(checkFinanceAccess({ summary: "constructor" }).field, "financeAccess");
+  assert.equal(canFinance({ role: "DEPUTY", financeAccess: '{"summary":"constructor"}' }, "summary"), false);
 });

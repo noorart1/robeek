@@ -1,6 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import prisma from "../../../../../lib/prisma";
 import { requirePageUser } from "../../../../../lib/auth";
+import { canFinance } from "../../../../../lib/finance-access";
 import { formatDate } from "../../../../../lib/arabic";
 import { amountInWords } from "../../../../../lib/tafqeet";
 import { PAYMENT_METHODS, formatMoney } from "../../../../../lib/labels";
@@ -17,7 +18,9 @@ const key = { minWidth: "130px", color: "#475569" };
 // وصل صرف راتب: one salary payment, in the child's receipt frame. A
 // refund (استرجاع) is money the person gave back: it prints as وصل قبض.
 export default async function SalaryReceiptPage({ params }) {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
+  // A معاون: only with «رواتب الموظفين» in المالية.
+  if (!canFinance(user, "salaries")) redirect("/dashboard/finance");
   const { id } = await params;
   const paymentId = Number(id);
 

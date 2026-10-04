@@ -163,7 +163,9 @@ export default function StaffManager() {
 // Like the children's dialog: the person's details, editable, their
 // salaries (الرواتب, as الدفعات for a child) and سجل تغيير الراتب.
 // onChanged: something was saved, so the page behind should reload.
-export function StaffDialog({ id, jobs, onClose, onChanged }) {
+// From المالية for a معاون: their details shown, not edited
+// (staffEditable false), and no payments recorded or voided (readOnly).
+export function StaffDialog({ id, jobs, onClose, onChanged, readOnly = false, staffEditable = true }) {
   const dialogRef = useRef(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -206,7 +208,7 @@ export function StaffDialog({ id, jobs, onClose, onChanged }) {
 
         {data && (
           <>
-            <StaffForm
+            {staffEditable ? <StaffForm
               key={data.staff.updatedAt}
               person={data.staff}
               jobs={jobs}
@@ -214,8 +216,13 @@ export function StaffDialog({ id, jobs, onClose, onChanged }) {
               onDirtyChange={(value) => { dirty.current = value; }}
               onSaved={() => { dirty.current = []; changed(); }}
               onDeleted={() => { onChanged(); onClose(); }}
-            />
-            <Salaries person={data.staff} salaries={data.salaries} payments={data.payments} onChanged={changed} />
+            /> : (
+              <h2 style={{ color: "#1e40af", margin: "0 0 12px" }}>
+                {data.staff.name}
+                {data.staff.job && <small style={{ color: "#64748b", fontWeight: 400 }}> — {data.staff.job}</small>}
+              </h2>
+            )}
+            <Salaries person={data.staff} salaries={data.salaries} payments={data.payments} onChanged={changed} readOnly={readOnly} />
             <PayChanges changes={data.changes} />
           </>
         )}
@@ -235,7 +242,7 @@ const h3 = { color: "#1e40af", margin: "4px 0 8px", fontSize: "16px" };
 // struck through), printing, and a form that records a payment at once.
 // A month is due الراتب الاسمي unless set otherwise under
 // المالية → الرواتب; a payment never exceeds what is left of it.
-function Salaries({ person, salaries, payments, onChanged }) {
+function Salaries({ person, salaries, payments, onChanged, readOnly }) {
   const thisMonth = iraqToday().slice(0, 7);
   const dueOf = (month) => {
     const salary = salaries.find((s) => s.month === month);
@@ -390,7 +397,7 @@ function Salaries({ person, salaries, payments, onChanged }) {
                       >
                         طباعة
                       </button>
-                      {!voided && (
+                      {!voided && !readOnly && (
                         <button
                           type="button"
                           disabled={busy}
@@ -410,7 +417,7 @@ function Salaries({ person, salaries, payments, onChanged }) {
         </div>
       )}
 
-      <form onSubmit={add} style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginTop: "8px" }}>
+      {!readOnly && <form onSubmit={add} style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginTop: "8px" }}>
         <input
           aria-label="مبلغ الدفعة"
           placeholder="المبلغ"
@@ -452,7 +459,7 @@ function Salaries({ person, salaries, payments, onChanged }) {
           style={{ ...small, flex: "1 1 180px" }}
         />
         <button type="submit" disabled={busy}>{busy ? "جارٍ الحفظ..." : draft.paymentType === "REFUND" ? "+ تسجيل استرجاع" : "+ إضافة دفعة"}</button>
-      </form>
+      </form>}
 
       {error && <p role="alert" style={{ color: "#dc2626" }}>{error.message}</p>}
     </>

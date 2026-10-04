@@ -1,6 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import prisma from "../../../../../lib/prisma";
 import { requirePageUser } from "../../../../../lib/auth";
+import { canFinance } from "../../../../../lib/finance-access";
 import { formatDate } from "../../../../../lib/arabic";
 import { iraqToday } from "../../../../../lib/dates";
 import { PAYMENT_METHODS, SALARY_PAYMENT_TYPES, formatMoney } from "../../../../../lib/labels";
@@ -17,7 +18,9 @@ const money = { ...cell, textAlign: "left", whiteSpace: "nowrap" };
 // كشف وصولات الرواتب: every salary payment to one person on one sheet,
 // like a child's كشف الوصولات. Voided receipts are left out.
 export default async function StaffSalariesPage({ params }) {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
+  // A معاون: only with «رواتب الموظفين» in المالية.
+  if (!canFinance(user, "salaries")) redirect("/dashboard/finance");
   const { id } = await params;
   const staffId = Number(id);
 

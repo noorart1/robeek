@@ -18,7 +18,10 @@ const small = { ...control, padding: "5px 6px" };
 // (the person's usual salary until set otherwise), what was paid and what
 // is left. «دفع الباقي» pays the rest in one receipt; part payments,
 // receipts and voiding are in the person's window (click the name).
-export default function SalariesBoard({ defaultMonth }) {
+// readOnly: listed only (a معاون who may see the tab but not change it).
+// staffEditable: the person's details can be edited in their window
+// (admins: الكادر is theirs).
+export default function SalariesBoard({ defaultMonth, readOnly = false, staffEditable = true }) {
   const [month, setMonth] = useUrlMonth(defaultMonth);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -92,6 +95,7 @@ export default function SalariesBoard({ defaultMonth }) {
                     onPaid={(payment) => setReceipt({ staffId: person.id, ...payment })}
                     onSaved={load}
                     onOpen={() => setOpen(person.id)}
+                    readOnly={readOnly}
                   />
                 );
               })}
@@ -133,13 +137,15 @@ export default function SalariesBoard({ defaultMonth }) {
           jobs={[...new Set([...JOB_SUGGESTIONS, ...(data?.staff ?? []).map((s) => s.job).filter(Boolean)])]}
           onClose={() => setOpen(null)}
           onChanged={load}
+          readOnly={readOnly}
+          staffEditable={staffEditable}
         />
       )}
     </>
   );
 }
 
-function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen }) {
+function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen, readOnly }) {
   const initial = {
     baseSalary: salary?.baseSalary ?? person.baseSalary ?? "",
     deduction: salary?.deduction ?? "",
@@ -208,6 +214,7 @@ function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen }) 
   const input = (field, props = {}) => (
     <input
       {...props}
+      readOnly={readOnly}
       form={`salary-${person.id}`}
       value={form[field]}
       onChange={(e) => set(field, e.target.value)}
@@ -246,7 +253,7 @@ function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen }) 
       <td style={{ ...money, fontWeight: 600, color: remaining > 0 ? "#b91c1c" : undefined }}>{formatMoney(remaining)}</td>
       <td style={cell}>{input("notes", { maxLength: 500, title: form.notes || undefined, style: { width: "120px" } })}</td>
       <td style={{ ...cell, whiteSpace: "normal" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center", minWidth: "150px" }}>
+        {!readOnly && <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center", minWidth: "150px" }}>
           <form id={`salary-${person.id}`} onSubmit={save} style={{ display: "inline" }}>
             <button type="submit" disabled={busy || !dirty} title="حفظ الراتب المستحق لهذا الشهر">حفظ</button>
           </form>
@@ -270,7 +277,7 @@ function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen }) 
               حذف
             </button>
           )}
-        </div>
+        </div>}
       </td>
     </tr>
   );

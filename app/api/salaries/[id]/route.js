@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { requireAdmin } from "../../../../lib/auth";
+import { requireFinance } from "../../../../lib/auth";
 import { errorResponse } from "../../../../lib/users";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries", true);
     if (response) return response;
 
     const id = Number((await params).id);

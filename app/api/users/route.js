@@ -5,6 +5,7 @@ import { requireAdmin } from "../../../lib/auth";
 import {
   assignClasses,
   checkClassIds,
+  checkFinanceAccess,
   checkFullName,
   checkPassword,
   checkRole,
@@ -43,7 +44,8 @@ export async function GET() {
   }
 }
 
-//   POST { username, fullName, password, role: ADMIN|TEACHER, classIds?, staffId? }
+//   POST { username, fullName, password, role: ADMIN|DEPUTY|TEACHER, classIds?,
+//          financeAccess? (DEPUTY), staffId? }
 // With staffId the account belongs to that person in الكادر and takes
 // her name from there.
 
@@ -63,7 +65,8 @@ export async function POST(request) {
       checkFullName(body.fullName),
       checkPassword(body.password),
       checkRole(body.role),
-      checkClassIds(body.classIds ?? [])
+      checkClassIds(body.classIds ?? []),
+      checkFinanceAccess(body.financeAccess ?? {})
     ];
 
     const failed = checks.find((check) => check.error);
@@ -75,7 +78,7 @@ export async function POST(request) {
     const staff = await checkStaffId(prisma, body.staffId);
     if (staff.error) return errorResponse(staff.error, 400, { field: staff.field });
 
-    const [username, typedName, password, role, classIds] = checks.map((c) => c.value);
+    const [username, typedName, password, role, classIds, financeAccess] = checks.map((c) => c.value);
     const fullName = staff.staff?.name ?? typedName;
     const staffId = staff.value ?? null;
     const passwordHash = await bcrypt.hash(password, 12);
@@ -88,6 +91,7 @@ export async function POST(request) {
           passwordHash,
           role,
           staffId,
+          financeAccess: role === "DEPUTY" ? financeAccess : null,
           isActive: true,
           updatedAt: new Date()
         },

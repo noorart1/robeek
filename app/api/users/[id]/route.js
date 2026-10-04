@@ -5,6 +5,7 @@ import { requireAdmin } from "../../../../lib/auth";
 import {
   assignClasses,
   checkClassIds,
+  checkFinanceAccess,
   checkFullName,
   checkPassword,
   checkRole,
@@ -19,7 +20,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // تعديل مستخدم:
-//   PATCH { fullName?, role?, isActive?, classIds?, password?, staffId? }
+//   PATCH { fullName?, role?, isActive?, classIds?, financeAccess?, password?, staffId? }
 // An account linked to الكادر (staffId) takes its name from there.
 // `password` is an admin reset; deactivating or resetting signs the user
 // out everywhere. Guards keep the school from locking itself out: no
@@ -89,6 +90,12 @@ export async function PATCH(request, { params }) {
       return errorResponse(classCheck.error, 400, { field: classCheck.field });
     }
 
+    const accessCheck = checkFinanceAccess(body.financeAccess);
+    if (accessCheck.error) {
+      return errorResponse(accessCheck.error, 400, { field: accessCheck.field });
+    }
+    if (accessCheck.value !== undefined) data.financeAccess = accessCheck.value;
+
     const staffCheck = await checkStaffId(prisma, body.staffId);
     if (staffCheck.error) {
       return errorResponse(staffCheck.error, 400, { field: staffCheck.field });
@@ -117,6 +124,9 @@ export async function PATCH(request, { params }) {
       if (staffId) {
         data.fullName = (await tx.staff.findUnique({ where: { id: staffId }, select: { name: true } })).name;
       }
+
+      // المالية's tabs belong to a معاون only.
+      if (role !== "DEPUTY") data.financeAccess = null;
 
       await tx.user.update({
         where: { id: userId },
