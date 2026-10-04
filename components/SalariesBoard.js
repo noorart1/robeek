@@ -5,19 +5,21 @@ import { useEffect, useState } from "react";
 import { StaffDialog, control, send } from "./StaffManager";
 import { useUrlMonth } from "./url-month";
 import { formatDate } from "../lib/arabic";
-import { parseAmount } from "../lib/digits";
-import { PAYMENT_METHODS, SHIFTS, formatMoney } from "../lib/labels";
-import { JOB_SUGGESTIONS, netSalary } from "../lib/staff";
+import { SHIFTS, formatMoney } from "../lib/labels";
+import { JOB_SUGGESTIONS } from "../lib/staff";
 
 // Compact, so the whole month fits the page without scrolling sideways.
-const cell = { padding: "6px 5px", borderBottom: "1px solid #e2e8f0", textAlign: "right", whiteSpace: "nowrap" };
-const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums" };
-const small = { ...control, padding: "5px 6px" };
+// Money columns take only the width they need (width 1%), so the spare
+// width goes to ملاحظات instead of spreading the numbers apart.
+const cell = { padding: "8px 10px", borderBottom: "1px solid #e2e8f0", textAlign: "right", whiteSpace: "nowrap" };
+const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums", width: "1%" };
+// 0 as «—», so the figures that matter stand out.
+const amount = (value) => (value ? formatMoney(value) : "—");
 
 // الرواتب: one row per person for the chosen month — what they are due
 // (the person's usual salary until set otherwise), what was paid and what
-// is left. «دفع الباقي» pays the rest in one receipt; part payments,
-// receipts and voiding are in the person's window (click the name).
+// is left, read-only. Payments (راتب، مكافأة، الخصومات / السلف), receipts
+// and voiding are in the person's window (click the name).
 // readOnly: listed only (a معاون who may see the tab but not change it).
 // staffEditable: the person's details can be edited in their window
 // (admins: الكادر is theirs).
@@ -26,8 +28,6 @@ export default function SalariesBoard({ defaultMonth, readOnly = false, staffEdi
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(null); // staff id shown in the dialog
-  // The payment just recorded, offered for printing: { staffId, id, receiptNo }.
-  const [receipt, setReceipt] = useState(null);
 
   async function load() {
     try {
@@ -40,7 +40,6 @@ export default function SalariesBoard({ defaultMonth, readOnly = false, staffEdi
 
   useEffect(() => {
     setData(null);
-    setReceipt(null);
     load();
     // Staff are edited on «الكادر», often in another tab: refetch on return.
     window.addEventListener("focus", load);
@@ -49,12 +48,8 @@ export default function SalariesBoard({ defaultMonth, readOnly = false, staffEdi
 
   const salaryOf = (id) => data?.salaries.find((s) => s.staffId === id);
   const salaries = data?.salaries ?? [];
-  // Totals cover everyone listed: a month not saved yet is due the
-  // person's usual salary, as its row shows.
-  const rows = (data?.staff ?? []).map((person) => {
-    const due = person.baseSalary ?? 0;
-    return salaryOf(person.id) ?? { net: due, paid: 0, remaining: due };
-  });
+  // Totals cover everyone listed, as their rows show them.
+  const rows = (data?.staff ?? []).map((person) => figures(person, salaryOf(person.id)));
   const sum = (field) => rows.reduce((total, s) => total + s[field], 0);
 
   return (
@@ -71,31 +66,24 @@ export default function SalariesBoard({ defaultMonth, readOnly = false, staffEdi
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ backgroundColor: "#eff6ff", color: "#1e40af" }}>
-                <th style={cell}>الاسم</th>
+                <th style={{ ...cell, width: "1%" }}>الاسم</th>
                 <th style={money}>الراتب</th>
+                <th style={money}>المكافأة</th>
                 <th style={money}>الخصومات / السلف</th>
                 <th style={money}>الصافي</th>
                 <th style={money}>المدفوع</th>
                 <th style={money}>الباقي</th>
-                <th style={cell}>ملاحظات</th>
-                <th style={cell} />
+                <th style={{ ...cell, minWidth: "220px" }}>ملاحظات</th>
               </tr>
             </thead>
             <tbody>
               {data.staff.map((person) => {
-                const salary = salaryOf(person.id);
-                // An unsaved row restarts from the person's current salary once «الكادر» changes it.
                 return (
                   <SalaryRow
-                    key={`${month}-${person.id}-${salary ? `${salary.updatedAt}-${salary.paid}` : `new-${person.baseSalary}`}`}
+                    key={person.id}
                     person={person}
-                    salary={salary}
-                    month={month}
-                    receipt={receipt?.staffId === person.id ? receipt : null}
-                    onPaid={(payment) => setReceipt({ staffId: person.id, ...payment })}
-                    onSaved={load}
+                    salary={salaryOf(person.id)}
                     onOpen={() => setOpen(person.id)}
-                    readOnly={readOnly}
                   />
                 );
               })}
@@ -105,13 +93,16 @@ export default function SalariesBoard({ defaultMonth, readOnly = false, staffEdi
             </tbody>
             <tfoot>
               <tr style={{ fontWeight: "bold", backgroundColor: "#f8fafc" }}>
-                <td style={cell} colSpan={3}>
+                <td style={cell}>
                   المجموع (مدفوع بالكامل: {salaries.filter((s) => s.remaining <= 0).length} من {data.staff.length})
                 </td>
+                <td style={money}>{formatMoney(sum("base"))}</td>
+                <td style={{ ...money, color: "#15803d" }}>{formatMoney(sum("bonus"))}</td>
+                <td style={{ ...money, color: "#b91c1c" }}>{formatMoney(sum("deductions"))}</td>
                 <td style={money}>{formatMoney(sum("net"))}</td>
                 <td style={{ ...money, color: "#15803d" }}>{formatMoney(sum("paid"))}</td>
                 <td style={{ ...money, color: sum("remaining") > 0 ? "#b91c1c" : undefined }}>{formatMoney(sum("remaining"))}</td>
-                <td style={cell} colSpan={2} />
+                <td style={cell} />
               </tr>
             </tfoot>
           </table>
@@ -145,88 +136,37 @@ export default function SalariesBoard({ defaultMonth, readOnly = false, staffEdi
   );
 }
 
-function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen, readOnly }) {
-  const initial = {
-    baseSalary: salary?.baseSalary ?? person.baseSalary ?? "",
-    deduction: salary?.deduction ?? "",
-    notes: salary?.notes ?? ""
+// What a row shows. الصافي = الراتب + المكافأة − الخصومات / السلف, and
+// المدفوع counts bonuses but not advances (they are under الخصومات), so
+// الباقي is the month's own remaining. A month not saved yet is due the
+// person's usual salary.
+function figures(person, salary) {
+  if (!salary) {
+    const due = person.baseSalary ?? 0;
+    return { base: due, bonus: 0, deductions: 0, net: due, paid: 0, remaining: due };
+  }
+  const bonus = (salary.bonus ?? 0) + salary.bonuses;
+  const deductions = (salary.deduction ?? 0) + salary.advances;
+  return {
+    base: salary.baseSalary,
+    bonus,
+    deductions,
+    net: salary.baseSalary + bonus - deductions,
+    paid: salary.paid - salary.advances + salary.bonuses,
+    remaining: salary.remaining
   };
-  const [form, setForm] = useState(initial);
-  const [paymentMethod, setPaymentMethod] = useState("CASH");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+}
 
-  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
-  const border = (field) => (error?.field === field ? { borderColor: "#dc2626" } : undefined);
-  const amount = (value) => parseAmount(value) ?? 0;
-  const net = netSalary({ baseSalary: amount(form.baseSalary), bonus: salary?.bonus, deduction: amount(form.deduction) });
-  const paid = salary?.paid ?? 0;
-  const remaining = net - paid;
-  const dirty = !salary || Object.keys(initial).some((key) => String(form[key]) !== String(initial[key]));
+// Read-only: pay, bonuses and الخصومات / السلف are recorded as payments
+// in the person's window (click the name); the first one saves the month.
+function SalaryRow({ person, salary, onOpen }) {
+  const f = figures(person, salary);
 
-  const saveSalary = () => send("/api/salaries", "PUT", { staffId: person.id, month, ...form });
-
-  async function save(event) {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await saveSalary();
-      onSaved();
-    } catch (err) {
-      setError({ message: err.message, field: err.field });
-      setBusy(false);
-    }
-  }
-
-  // دفع الباقي: saves the month's figures first if they were edited.
-  async function payRest() {
-    if (busy || remaining <= 0) return;
-    if (!window.confirm(`دفع ${formatMoney(remaining)} د.ع إلى ${person.name} عن ${month}؟`)) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (dirty) await saveSalary();
-      const { payment } = await send("/api/salaries/payments", "POST", {
-        staffId: person.id, month, amount: remaining, paymentMethod
-      });
-      onPaid(payment);
-      onSaved();
-    } catch (err) {
-      setError({ message: err.message, field: err.field });
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    if (!window.confirm(`حذف راتب ${person.name} لهذا الشهر؟`)) return;
-    setBusy(true);
-    try {
-      await send(`/api/salaries/${salary.id}`, "DELETE");
-      onSaved();
-    } catch (err) {
-      setError({ message: err.message });
-      setBusy(false);
-    }
-  }
-
-  const input = (field, props = {}) => (
-    <input
-      {...props}
-      readOnly={readOnly}
-      form={`salary-${person.id}`}
-      value={form[field]}
-      onChange={(e) => set(field, e.target.value)}
-      style={{ ...small, ...border(field), ...props.style }}
-    />
-  );
-  const amountInput = (field) => input(field, { dir: "ltr", inputMode: "numeric", style: { width: "88px" } });
-  const background = salary && remaining <= 0 ? "#f0fdf4" : paid > 0 ? "#fffbeb" : undefined;
+  const background = salary && f.remaining <= 0 ? "#f0fdf4" : f.paid > 0 ? "#fffbeb" : undefined;
 
   return (
     <tr style={{ backgroundColor: background, opacity: person.isActive ? 1 : 0.6 }}>
-      <td style={{ ...cell, whiteSpace: "normal", minWidth: "130px" }}>
+      <td style={cell}>
         <button
           type="button"
           onClick={onOpen}
@@ -238,47 +178,14 @@ function SalaryRow({ person, salary, month, receipt, onPaid, onSaved, onOpen, re
         <div style={{ fontSize: "12px", color: "#64748b" }}>
           {[person.job, SHIFTS[person.shift]].filter(Boolean).join(" — ")}
         </div>
-        {receipt && (
-          <div role="status" style={{ fontSize: "12px", color: "#15803d" }}>
-            ✓ وصل <span dir="ltr">{receipt.receiptNo}</span>{" "}
-            <a href={`/dashboard/receipts/salary/${receipt.id}`} target="_blank" rel="noopener noreferrer">🖨 طباعة</a>
-          </div>
-        )}
-        {error && <div role="alert" style={{ color: "#dc2626", fontSize: "12px", whiteSpace: "normal" }}>{error.message}</div>}
       </td>
-      <td style={money}>{amountInput("baseSalary")}</td>
-      <td style={money}>{amountInput("deduction")}</td>
-      <td style={{ ...money, fontWeight: 600 }}>{formatMoney(net)}</td>
-      <td style={{ ...money, color: "#15803d" }}>{formatMoney(paid)}</td>
-      <td style={{ ...money, fontWeight: 600, color: remaining > 0 ? "#b91c1c" : undefined }}>{formatMoney(remaining)}</td>
-      <td style={cell}>{input("notes", { maxLength: 500, title: form.notes || undefined, style: { width: "120px" } })}</td>
-      <td style={{ ...cell, whiteSpace: "normal" }}>
-        {!readOnly && <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center", minWidth: "150px" }}>
-          <form id={`salary-${person.id}`} onSubmit={save} style={{ display: "inline" }}>
-            <button type="submit" disabled={busy || !dirty} title="حفظ الراتب المستحق لهذا الشهر">حفظ</button>
-          </form>
-          {remaining > 0 && (
-            <>
-              <select
-                aria-label="نوع الدفع"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                style={small}
-              >
-                {Object.entries(PAYMENT_METHODS).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-              </select>
-              <button type="button" disabled={busy} onClick={payRest} style={{ color: "#15803d", fontWeight: 600 }}>
-                دفع الباقي
-              </button>
-            </>
-          )}
-          {salary && paid === 0 && (
-            <button type="button" disabled={busy} onClick={remove} style={{ color: "#b91c1c" }}>
-              حذف
-            </button>
-          )}
-        </div>}
-      </td>
+      <td style={money}>{formatMoney(f.base)}</td>
+      <td style={{ ...money, color: f.bonus ? "#15803d" : "#94a3b8" }}>{amount(f.bonus)}</td>
+      <td style={{ ...money, color: f.deductions ? "#b91c1c" : "#94a3b8" }}>{amount(f.deductions)}</td>
+      <td style={{ ...money, fontWeight: 600 }}>{formatMoney(f.net)}</td>
+      <td style={{ ...money, color: f.paid ? "#15803d" : "#94a3b8" }}>{amount(f.paid)}</td>
+      <td style={{ ...money, fontWeight: 600, color: f.remaining > 0 ? "#b91c1c" : "#94a3b8" }}>{amount(f.remaining)}</td>
+      <td style={{ ...cell, whiteSpace: "normal", color: "#475569", fontSize: "14px" }}>{salary?.notes}</td>
     </tr>
   );
 }

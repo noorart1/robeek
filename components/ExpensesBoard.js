@@ -16,14 +16,14 @@ import { EXPENSE_CATEGORIES, EXPENSE_ITEMS, PARTNERS, isHandover } from "../lib/
 const BOARDS = {
   GENERAL: { categories: ["GENERAL"], items: ["الكهرباء", "ماء", "انترنت", ...EXPENSE_ITEMS], noun: "مصروف", empty: "لا توجد مصاريف عامة في هذا الشهر." },
   ASSET: { categories: ["ASSET"], items: ["رسوم ادارية", "العاب وديكور", "تطوير", "اجهزة"], noun: "مصروف ثابت", empty: "لا توجد مصاريف ثابتة في هذا الشهر." },
-  // تسليم الخزينة is worked out from the receipts now, and وارد آخر is no
-  // longer entered: their old rows are listed (and editable) but no new
-  // ones are added, so a new movement is always سحب الشركاء (from الخزينة).
+  // A new movement is a partner's draw (سحب …, from الخزينة) or تسليم
+  // الخزينة (from صندوق المركز), both stored as WITHDRAWAL; the old INCOME
+  // and HANDOVER rows are listed (and editable) but no new ones are added.
   BOX: {
     categories: ["WITHDRAWAL", "INCOME", "HANDOVER"],
     legacy: ["INCOME", "HANDOVER"],
     // A fixed list, nothing typed by hand (older rows keep their item).
-    items: PARTNERS.map((p) => `سحب ${p.name}`),
+    items: [...PARTNERS.map((p) => `سحب ${p.name}`), "تسليم الخزينة"],
     fixedItems: true,
     // The list can be narrowed to one البند.
     itemFilter: true,
@@ -134,6 +134,8 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth, readOnly
     setItemFilter((f) => (f.includes(item) ? f.filter((i) => i !== item) : [...f, item]));
   // «تسليم الخزينة» rows are stored as WITHDRAWAL but are a handover.
   const kindOf = (e) => (isHandover(e) ? "HANDOVER" : e.category);
+  // Where each movement's money comes from.
+  const FROM = { HANDOVER: "صندوق المركز", WITHDRAWAL: "الخزينة" };
   const sum = (category) =>
     shown.filter((e) => !category || kindOf(e) === category).reduce((t, e) => t + e.amount, 0);
 
@@ -258,7 +260,12 @@ export default function ExpensesBoard({ kind = "GENERAL", defaultMonth, readOnly
                 <tr key={e.id} style={{ backgroundColor: editingId === e.id ? "#fef9c3" : undefined }}>
                   <td style={cell}>{formatDate(e.date)}</td>
                   <td style={cell}>{e.item}</td>
-                  {kinds && <td style={cell}>{EXPENSE_CATEGORIES[kindOf(e)]}</td>}
+                  {kinds && (
+                    <td style={cell}>
+                      {EXPENSE_CATEGORIES[kindOf(e)]}
+                      {FROM[kindOf(e)] && <small style={{ color: "#64748b" }}> — من {FROM[kindOf(e)]}</small>}
+                    </td>
+                  )}
                   <td style={cell}>{PAYMENT_METHODS[e.paymentMethod] || "—"}</td>
                   <td style={money}>{formatMoney(e.amount)}</td>
                   <td style={{ ...cell, maxWidth: "280px", overflow: "hidden", textOverflow: "ellipsis" }} title={e.notes || undefined}>{e.notes}</td>

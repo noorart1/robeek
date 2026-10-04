@@ -190,11 +190,11 @@ export default async function FinancePage({ searchParams }) {
   ];
   const monthTotal = (key) => months.reduce((sum, m) => sum + m[key], 0);
 
-  // الصندوق وحصص الشركاء: صافي الربح = الإيرادات − المصروفات. Money moves
-  // twice: from صندوق المركز to الخزينة (تسليم الخزينة), and from الخزينة
-  // to the partners (سحب …). So صندوق المركز = صافي الربح − تسليم الخزينة,
-  // and الخزينة = تسليم الخزينة − سحب الشركاء. Each partner is due their
-  // share of the net.
+  // الصندوق وحصص الشركاء: صافي الربح = الإيرادات − المصروفات; each partner
+  // is due their share of it. تسليم الخزينة moves money from صندوق المركز
+  // to الخزينة, and the partners draw (سحب …) from الخزينة: صندوق المركز =
+  // إجمالي الإيرادات − المصروفات − تسليم الخزينة, الخزينة = تسليم الخزينة −
+  // سحب الشركاء. Both cover the chosen year only.
   const net = monthTotal("net");
   const handovers = monthTotal("handovers");
   const inRange = (e) => !range || (dayMonth(e.date) >= range.from && dayMonth(e.date) <= range.to);
@@ -209,7 +209,11 @@ export default async function FinancePage({ searchParams }) {
   // الإيرادات والأرباح: the same totals as «الملخص», income split by kind.
   const income = incomeBreakdown(allPayments, (m) => !range || (m >= range.from && m <= range.to));
   const received = income.cash + income.card + income.unknown + income.curriculum;
-  const totalIncome = received + monthTotal("otherIncome") - income.refunds;
+  // إجمالي الإيرادات: children's receipts (tuition, curriculum and uniform)
+  // less their refunds; وارد آخر is not part of it.
+  const totalIncome = received - income.refunds;
+  const spent = monthTotal("salaries") + monthTotal("expenses") + monthTotal("assets");
+  const centreBox = totalIncome - spent - handovers;
 
   const enrollmentSelect = {
     tuitionFee: true,
@@ -415,9 +419,9 @@ export default async function FinancePage({ searchParams }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "12px", marginBottom: "20px" }}>
           {[
             ["إجمالي الإيرادات", totalIncome, "#15803d"],
-            ["المصروفات", -(monthTotal("salaries") + monthTotal("expenses") + monthTotal("assets")), "#b91c1c"],
+            ["المصروفات", -spent, "#b91c1c"],
             ["صافي الربح", net, "#1d4ed8", true],
-            ["صندوق المركز", net - handovers, "#0f766e"],
+            ["صندوق المركز", centreBox, "#0f766e"],
             ["الخزينة", handovers - withdrawals, "#7c3aed"]
           ].map(([label, value, color, main]) => (
             <div key={label} style={{ ...panel, borderTop: `4px solid ${color}`, ...(main && { backgroundColor: "#eff6ff" }) }}>
@@ -442,7 +446,6 @@ export default async function FinancePage({ searchParams }) {
                   ...(income.unknown ? [["أقساط (نوع الدفع غير محدد)", income.unknown, false, true]] : []),
                   ["المنهج والزي", income.curriculum, false, true],
                   ["الواصل", received, true],
-                  ...(monthTotal("otherIncome") ? [["وارد آخر", monthTotal("otherIncome")]] : []),
                   ...(income.refunds ? [["الاسترجاع", -income.refunds]] : []),
                   ["إجمالي الإيرادات", totalIncome, true],
                   ["الرواتب والمكافآت", -monthTotal("salaries")],
@@ -460,26 +463,35 @@ export default async function FinancePage({ searchParams }) {
             </table>
           </section>
 
-          <section style={panel}>
-            <h2 style={panelTitle}>الخزينة</h2>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <tbody>
-                {[
-                  ["الدفعات المستلمة", handovers],
-                  ["سحب الشركاء", -withdrawals],
-                  ["الباقي", handovers - withdrawals, true]
-                ].map(([label, value, strong]) => (
-                  <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
-                    <td style={{ ...cell, whiteSpace: "normal" }}>{label}</td>
-                    <td style={{ ...money, color: value < 0 ? "#b91c1c" : undefined }}>{formatMoney(value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p style={{ color: "#64748b", fontSize: "13px", margin: "10px 0 0" }}>
-              الخزينة = الدفعات المستلمة − سحب الشركاء = الباقي.
-            </p>
-          </section>
+          {[
+            ["صندوق المركز", [
+              ["إجمالي الإيرادات", totalIncome],
+              ["المصروفات (الرواتب والعامة والثابتة)", -spent],
+              ["تسليم الخزينة", -handovers],
+              ["الباقي", centreBox, true]
+            ], "صندوق المركز = إجمالي الإيرادات − المصروفات − تسليم الخزينة."],
+            ["الخزينة", [
+              ["تسليم الخزينة (من صندوق المركز)", handovers],
+              ...partners.map((p) => [`سحب ${p.name}`, -p.taken]),
+              ...(unassigned ? [["سحب لا يحمل اسم شريك", -unassigned]] : []),
+              ["الباقي", handovers - withdrawals, true]
+            ], "الخزينة = تسليم الخزينة − سحب الشركاء."]
+          ].map(([title, rows, note]) => (
+            <section key={title} style={panel}>
+              <h2 style={panelTitle}>{title}</h2>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  {rows.map(([label, value, strong]) => (
+                    <tr key={label} style={strong ? { fontWeight: "bold", backgroundColor: "#f8fafc" } : undefined}>
+                      <td style={{ ...cell, whiteSpace: "normal" }}>{label}</td>
+                      <td style={{ ...money, color: value < 0 ? "#b91c1c" : undefined }}>{formatMoney(value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{ color: "#64748b", fontSize: "13px", margin: "10px 0 0" }}>{note}</p>
+            </section>
+          ))}
         </div>
 
         <section style={{ ...panel, marginBottom: "20px" }}>

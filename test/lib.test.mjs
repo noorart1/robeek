@@ -211,6 +211,18 @@ test("salary payment: positive amount, valid month/date/method; voided never cou
     SalaryPayment: [{ amount: "700000.00" }, { amount: "50000.00", paymentType: "REFUND" }]
   });
   assert.deepEqual([refunded.paid, refunded.remaining], [650000, 50000]);
+
+  // الخصومات / السلف counts towards the salary; a bonus is on top of it.
+  assert.equal(checkSalaryPayment({ ...base, paymentType: "ADVANCE" }).data.paymentType, "ADVANCE");
+  const advanced = formatSalary({
+    baseSalary: "700000.00", bonus: null, deduction: "0.00",
+    SalaryPayment: [
+      { amount: "100000.00", paymentType: "ADVANCE" },
+      { amount: "50000.00", paymentType: "BONUS" },
+      { amount: "30000.00", paymentType: "ADVANCE", voidedAt: new Date() }
+    ]
+  });
+  assert.deepEqual([advanced.advances, advanced.bonuses, advanced.paid, advanced.remaining], [100000, 50000, 100000, 600000]);
 });
 
 test("pay change: logged only when the salary really changes", async () => {
@@ -252,27 +264,8 @@ test("monthly summary: income by method, refunds and spending by month", async (
     [107, 50, 30, 20, 60, 10, 167, 97]
   );
   assert.deepEqual([aug.assets, aug.net], [5, -5]);
-  // تسليم الإدارة comes from the receipts only from October 2026 on:
-  // before that, only what was entered by hand.
+  // Receipts never count as handed over: only what is entered by hand.
   assert.equal(sep.handovers, 0);
-  const [nov] = monthlySummary({
-    payments: [
-      { amount: 100, paymentType: "TUITION", paymentMethod: "CASH", paymentDate: "2026-11-10T08:00:00Z" },
-      { amount: 50, paymentType: "CURRICULUM", paymentMethod: "CARD", paymentDate: "2026-11-11T08:00:00Z" },
-      { amount: 30, paymentType: "TUITION", paymentMethod: null, paymentDate: "2026-11-12T08:00:00Z" },
-      { amount: 40, paymentType: "TUITION", paymentMethod: "CARD", paymentDate: "2026-11-12T08:00:00Z" },
-      { amount: 20, paymentType: "REFUND", paymentMethod: "CASH", paymentDate: "2026-11-13T08:00:00Z" }
-    ],
-    salaries: [],
-    expenses: [{ date: "2026-11-20", category: "HANDOVER", amount: 5 }]
-  });
-  // cash and method-less tuition 100 + 30, curriculum 50 (any method), less
-  // the cash refund 20, and the old hand-entered row 5; card tuition is not.
-  assert.equal(nov.handovers, 165);
-  const { handedOver } = await import("../lib/finance.js");
-  assert.equal(handedOver({ amount: 90, paymentType: "TUITION", paymentMethod: "CARD" }), 0);
-  assert.equal(handedOver({ amount: 90, paymentType: "REFUND", paymentMethod: "CARD" }), 0);
-  assert.equal(handedOver({ amount: 15, paymentType: "CURRICULUM_REFUND", paymentMethod: "CASH" }), -15);
 
   // Other income adds; handovers and partners' withdrawals don't touch net.
   const [oct] = monthlySummary({
@@ -307,12 +300,12 @@ test("monthly summary: income by method, refunds and spending by month", async (
   assert.equal(checkExpense(lump).field, "category");
   assert.equal(checkExpense(lump, "GENERAL").field, "category");
   assert.equal(checkExpense(lump, "SALARY").data.category, "SALARY");
-  // تسليم الإدارة is worked out from the receipts: no new hand-entered ones.
+  // The old HANDOVER category: no new rows; a handover is a «تسليم الخزينة» row.
   const handover = { date: "2026-09-06", item: "تسليم الإدارة", amount: "1000", category: "HANDOVER" };
   assert.equal(checkExpense(handover).field, "category");
   assert.equal(checkExpense(handover, "HANDOVER").data.category, "HANDOVER");
   const named = { date: "2026-10-06", item: "تسليم الخزينة", amount: "1000", category: "WITHDRAWAL" };
-  assert.equal(checkExpense(named).field, "category");
+  assert.equal(checkExpense(named).data.item, "تسليم الخزينة");
   assert.equal(checkExpense(named, "WITHDRAWAL").data.item, "تسليم الخزينة");
 });
 
