@@ -185,7 +185,7 @@ function SalaryRow({ person, salary, onOpen }) {
       <td style={{ ...money, fontWeight: 600 }}>{formatMoney(f.net)}</td>
       <td style={{ ...money, color: f.paid ? "#15803d" : "#94a3b8" }}>{amount(f.paid)}</td>
       <td style={{ ...money, fontWeight: 600, color: f.remaining > 0 ? "#b91c1c" : "#94a3b8" }}>{amount(f.remaining)}</td>
-      <td style={{ ...cell, whiteSpace: "normal", color: "#475569", fontSize: "14px" }}>{salary?.notes}</td>
+      <td style={{ ...cell, whiteSpace: "normal", color: "#475569", fontSize: "14px" }}>{salary?.allNotes.join(" · ")}</td>
     </tr>
   );
 }
