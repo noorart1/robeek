@@ -273,16 +273,20 @@ neither file: use a password manager, and keep `.env` gitignored.
 
 ## Roles
 
-Two roles can sign in (`ROLE_HOME` in `lib/auth.js`):
+Three roles can sign in (`ROLE_HOME` in `lib/auth.js`):
 
 - **ADMIN** — everything.
+- **DEPUTY** (معاون) — everything but users, backups and starting a
+  year (API routes: `requireOffice()`). Of المالية only the tabs in
+  `User.financeAccess` (READ or WRITE, `requireFinance(tab)`); الكادر
+  follows the «رواتب الموظفين» tab, since it holds salaries.
 - **TEACHER** (مرشدة) — only `/dashboard/attendance` and «حسابي», and only
   for the sections whose `Class.teacherUserId` is her account. Names only:
   attendance responses carry no photo for her.
 
 Server pages call `requirePageUser([...roles])`, which redirects other
 roles to their own start page. Every API route checks the role itself —
-admin-only routes with `const { user, response } = await requireAdmin();
+admin-or-معاون routes with `requireOffice()`, admin-only routes with `const { user, response } = await requireAdmin();
 if (response) return response;` (`lib/auth.js`);
 `/api/attendance` and `/api/options` additionally scope a teacher to her
 sections. When adding a route, decide its roles explicitly — the default

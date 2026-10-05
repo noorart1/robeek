@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { requireAdmin } from "../../../../lib/auth";
+import { requireOffice } from "../../../../lib/auth";
 import { validateLine } from "../../../../lib/transport-lines";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ async function lineIdFrom(params) {
 
 export async function PATCH(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
 
     const lineId = await lineIdFrom(params);
@@ -72,7 +72,7 @@ export async function PATCH(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
 
     const lineId = await lineIdFrom(params);

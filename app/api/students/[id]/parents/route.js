@@ -1,5 +1,5 @@
 import prisma from "../../../../../lib/prisma";
-import { requireAdmin } from "../../../../../lib/auth";
+import { requireOffice } from "../../../../../lib/auth";
 import { toWesternDigits } from "../../../../../lib/digits";
 
 export const runtime = "nodejs";
@@ -45,7 +45,7 @@ async function getStudentId(params) {
 
 export async function GET(request, { params }) {
   try {
-    const { response } = await requireAdmin();
+    const { response } = await requireOffice();
     if (response) return response;
 
     const studentId = await getStudentId(params);
@@ -103,7 +103,7 @@ export async function GET(request, { params }) {
 
 export async function POST(request, { params }) {
   try {
-    const { response } = await requireAdmin();
+    const { response } = await requireOffice();
     if (response) return response;
 
     const studentId = await getStudentId(params);
@@ -337,7 +337,7 @@ export async function POST(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const { response } = await requireAdmin();
+    const { response } = await requireOffice();
     if (response) return response;
 
     const studentId = await getStudentId(params);

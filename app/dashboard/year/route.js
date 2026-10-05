@@ -25,7 +25,7 @@ export async function GET(request) {
   // http://localhost:3000, not the public address.
   const response = new NextResponse(null, { status: 303, headers: { Location: target } });
 
-  if (user?.role !== "ADMIN") return response;
+  if (user?.role !== "ADMIN" && user?.role !== "DEPUTY") return response;
 
   const id = Number(url.searchParams.get("id"));
   if (Number.isInteger(id) && id > 0) {

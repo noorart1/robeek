@@ -4,26 +4,30 @@ import prisma from "../lib/prisma";
 import { yearView } from "../lib/year-view";
 import LogoutButton from "./LogoutButton";
 import { ROLE_HOME } from "../lib/auth";
+import { FINANCE_TABS, canFinance } from "../lib/finance-access";
 import YearPicker, { BackToActiveYear } from "./YearPicker";
 
-// Teachers see attendance only, a معاون المالية only; the pages
+// Teachers see attendance only; a معاون everything but users and backups,
+// المالية only with a tab of it, and الكادر only with رواتب الموظفين
+// (it holds salaries). The pages
 // themselves enforce the same.
 const links = [
-  { href: "/dashboard", label: "الرئيسية", roles: ["ADMIN"] },
-  { href: "/dashboard/students", label: "الأطفال", roles: ["ADMIN"] },
-  { href: "/dashboard/attendance", label: "الحضور", roles: ["ADMIN", "TEACHER"] },
-  { href: "/dashboard/staff", label: "الكادر", roles: ["ADMIN"] },
-  { href: "/dashboard/finance", label: "المالية", roles: ["ADMIN", "DEPUTY"] },
-  { href: "/dashboard/lines", label: "الخطوط", roles: ["ADMIN"] },
+  { href: "/dashboard", label: "الرئيسية", roles: ["ADMIN", "DEPUTY"] },
+  { href: "/dashboard/students", label: "الأطفال", roles: ["ADMIN", "DEPUTY"] },
+  { href: "/dashboard/attendance", label: "الحضور", roles: ["ADMIN", "DEPUTY", "TEACHER"] },
+  { href: "/dashboard/staff", label: "الكادر", roles: ["ADMIN", "DEPUTY"], tab: "salaries" },
+  { href: "/dashboard/finance", label: "المالية", roles: ["ADMIN", "DEPUTY"], tab: Object.keys(FINANCE_TABS) },
+  { href: "/dashboard/lines", label: "الخطوط", roles: ["ADMIN", "DEPUTY"] },
   { href: "/dashboard/users", label: "المستخدمون", roles: ["ADMIN"] },
   { href: "/dashboard/backups", label: "النسخ الاحتياطي", roles: ["ADMIN"] }
 ];
 
-// Admins choose the school year every page shows (lib/year-view.js); an
-// earlier one is announced under the header, editable like the current.
+// Admins and a معاون choose the school year every page shows
+// (lib/year-view.js); an earlier one is announced under the header,
+// editable like the current.
 export default async function AppHeader({ user, active }) {
-  const admin = user.role === "ADMIN";
-  const [view, years] = admin
+  const office = user.role === "ADMIN" || user.role === "DEPUTY";
+  const [view, years] = office
     ? await Promise.all([
         yearView(),
         prisma.academicYear.findMany({ where: { kind: "REGULAR" }, select: { id: true, name: true, isActive: true }, orderBy: { name: "desc" } })
@@ -61,7 +65,7 @@ export default async function AppHeader({ user, active }) {
       </Link>
 
       <nav style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-        {links.filter((link) => link.roles.includes(user.role)).map(({ href, label }) => (
+        {links.filter((link) => link.roles.includes(user.role) && (!link.tab || [].concat(link.tab).some((tab) => canFinance(user, tab)))).map(({ href, label }) => (
           <Link
             key={href}
             href={href}
@@ -88,6 +92,13 @@ export default async function AppHeader({ user, active }) {
           gap: "12px"
         }}
       >
+        <Link
+          href="/dashboard/help"
+          aria-current={active === "/dashboard/help" ? "page" : undefined}
+          style={{ color: active === "/dashboard/help" ? "#1e40af" : "#64748b", textDecoration: "none" }}
+        >
+          ❓ الدليل
+        </Link>
         <Link
           href="/dashboard/account"
           title="حسابي — تغيير كلمة المرور"

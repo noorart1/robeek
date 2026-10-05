@@ -1,6 +1,6 @@
 
 import prisma from "../../../../../lib/prisma";
-import { requireAdmin } from "../../../../../lib/auth";
+import { requireOffice } from "../../../../../lib/auth";
 import { parseAmount } from "../../../../../lib/digits";
 import { PAYMENT_METHODS, PAYMENT_TYPES } from "../../../../../lib/labels";
 import { loadStudent } from "../../../../../lib/student-data";
@@ -33,7 +33,7 @@ async function nextReceiptNo(tx, yearName) {
 
 export async function POST(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
 
     const { id } = await params;

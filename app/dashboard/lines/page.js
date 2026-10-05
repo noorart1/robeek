@@ -28,7 +28,7 @@ function phoneOf(student, relation) {
 }
 
 export default async function LinesPage() {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
 
   // The year chosen in the header. A child's line is not kept per year:
   // an earlier year shows its children on the line they are on now.

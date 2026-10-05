@@ -10,7 +10,7 @@ import Receipt from "../../../../components/Receipt";
 export const dynamic = "force-dynamic";
 
 export default async function ReceiptPage({ params }) {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
   const { id } = await params;
   const paymentId = Number(id);
 

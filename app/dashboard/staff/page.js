@@ -1,14 +1,17 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePageUser } from "../../../lib/auth";
+import { canFinance } from "../../../lib/finance-access";
 import AppHeader from "../../../components/AppHeader";
 import StaffManager from "../../../components/StaffManager";
 
 export const dynamic = "force-dynamic";
 
-// الكادر. Admins only: it holds salaries. Monthly pay is recorded under
-// المالية → الرواتب.
+// الكادر. It holds salaries: admins, and a معاون given رواتب الموظفين
+// (read only without WRITE). Monthly pay is recorded under المالية → الرواتب.
 export default async function StaffPage() {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
+  if (!canFinance(user, "salaries")) redirect("/dashboard");
 
   return (
     <>
@@ -20,7 +23,7 @@ export default async function StaffPage() {
           تسجيل الرواتب الشهرية من <Link href="/dashboard/finance?tab=salaries">المالية ← رواتب الموظفين</Link>.
         </p>
 
-        <StaffManager />
+        <StaffManager readOnly={!canFinance(user, "salaries", true)} />
       </main>
     </>
   );

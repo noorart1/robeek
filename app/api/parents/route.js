@@ -1,10 +1,10 @@
 import prisma from "../../../lib/prisma";
-import { requireAdmin } from "../../../lib/auth";
+import { requireOffice } from "../../../lib/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET() {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
     const parents = await prisma.parent.findMany({select:{id:true,firstName:true,lastName:true,phone:true},orderBy:{id:"desc"},take:500});
     return Response.json({parents},{headers:{"Cache-Control":"no-store"}});

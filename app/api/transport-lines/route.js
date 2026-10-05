@@ -1,6 +1,6 @@
 
 import prisma from "../../../lib/prisma";
-import { requireAdmin } from "../../../lib/auth";
+import { requireOffice } from "../../../lib/auth";
 import { validateLine } from "../../../lib/transport-lines";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ function errorResponse(message, status, extra = {}) {
 
 export async function POST(request) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
 
     let body;

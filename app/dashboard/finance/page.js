@@ -146,7 +146,7 @@ export default async function FinancePage({ searchParams }) {
           <Tabs tab={tab} tabs={tabs} params={params} />
           {readOnly && <ReadOnlyNote />}
           {tab === "salaries"
-            ? <SalariesBoard defaultMonth={defaultMonth} readOnly={readOnly} staffEditable={user.role === "ADMIN"} />
+            ? <SalariesBoard defaultMonth={defaultMonth} readOnly={readOnly} staffEditable={canFinance(user, "salaries", true)} />
             : <ExpensesBoard key={tab} kind={BOARD[tab]} defaultMonth={defaultMonth} readOnly={readOnly} />}
         </main>
       </>

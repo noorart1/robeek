@@ -6,7 +6,7 @@ import AttendanceBoard from "../../../components/AttendanceBoard";
 export const dynamic = "force-dynamic";
 
 export default async function AttendancePage() {
-  const user = await requirePageUser(["ADMIN", "TEACHER"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY", "TEACHER"]);
 
   return (
     <>

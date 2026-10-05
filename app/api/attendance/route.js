@@ -16,11 +16,11 @@ function errorResponse(message, status) {
   );
 }
 
-// Admins take attendance for any section; a teacher only for the sections
+// Admins and a معاون take attendance for any section; a teacher only for the sections
 // assigned to her (Class.teacherUserId). Returns the user, or null.
 async function attendanceUser() {
   const user = await getCurrentUser();
-  return user && (user.role === "ADMIN" || user.role === "TEACHER") ? user : null;
+  return user && ["ADMIN", "DEPUTY", "TEACHER"].includes(user.role) ? user : null;
 }
 
 const forbidden = () => errorResponse("هذه الشعبة غير مسندة إليك.", 403);

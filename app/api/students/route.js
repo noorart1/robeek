@@ -1,6 +1,6 @@
 
 import prisma from "../../../lib/prisma";
-import { requireAdmin } from "../../../lib/auth";
+import { requireOffice } from "../../../lib/auth";
 import { toWesternDigits } from "../../../lib/digits";
 import { validateField } from "../../../lib/student-fields";
 import { defaultEnrollmentDate, validateEnrollment } from "../../../lib/enrollment-fields";
@@ -28,7 +28,7 @@ function jsonError(message, status, extra = {}) {
 export async function GET() {
   try {
 
-    const { response } = await requireAdmin();
+    const { response } = await requireOffice();
     if (response) return response;
 
     const [students, view] = await Promise.all([
@@ -117,7 +117,7 @@ async function findOrCreateParent(tx, relation, phone, data) {
 export async function POST(request) {
   try {
 
-    const { response } = await requireAdmin();
+    const { response } = await requireOffice();
     if (response) return response;
 
     let body;

@@ -40,7 +40,8 @@ const cell = { padding: "8px 10px", borderBottom: "1px solid #e2e8f0", textAlign
 const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums" };
 
 // الكادر: the columns of the school's staff.xlsx, one person per row.
-export default function StaffManager() {
+// readOnly: listed only (a معاون given رواتب الموظفين to read).
+export default function StaffManager({ readOnly = false }) {
   const [staff, setStaff] = useState([]);
   const [editing, setEditing] = useState(null); // null | "new" | staff id
   const [error, setError] = useState("");
@@ -78,7 +79,7 @@ export default function StaffManager() {
     <>
       {error && <p role="alert" style={{ color: "#dc2626" }}>{error}</p>}
 
-      {editing === "new" ? (
+      {readOnly ? null : editing === "new" ? (
         <StaffForm jobs={jobs} onCancel={() => setEditing(null)} onSaved={saved} />
       ) : (
         <button
@@ -135,7 +136,7 @@ export default function StaffManager() {
                   <td style={cell}>{person.contract || "—"}</td>
                   <td style={cell}>{person.isActive ? "نشط" : "غير نشط"}</td>
                   <td style={cell}>
-                    <button type="button" onClick={() => setEditing(person.id)}>✎ تعديل</button>
+                    {!readOnly && <button type="button" onClick={() => setEditing(person.id)}>✎ تعديل</button>}
                   </td>
                 </tr>
             ))}
@@ -154,7 +155,7 @@ export default function StaffManager() {
       </div>
 
       {typeof editing === "number" && (
-        <StaffDialog key={editing} id={editing} jobs={jobs} onClose={() => setEditing(null)} onChanged={load} />
+        <StaffDialog key={editing} id={editing} jobs={jobs} onClose={() => setEditing(null)} onChanged={load} readOnly={readOnly} staffEditable={!readOnly} />
       )}
     </>
   );

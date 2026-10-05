@@ -19,7 +19,7 @@ const money = { ...cell, textAlign: "left", whiteSpace: "nowrap" };
 // sheet, in the receipt's frame. Voided receipts are left out.
 // ?term=summer: the summer course's receipts instead.
 export default async function StudentReceiptsPage({ params, searchParams }) {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
   const { id } = await params;
   const { term } = await searchParams;
   const studentId = Number(id);

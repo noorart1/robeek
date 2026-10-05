@@ -1,6 +1,6 @@
 
 import prisma from "../../../../../lib/prisma";
-import { requireAdmin } from "../../../../../lib/auth";
+import { requireOffice } from "../../../../../lib/auth";
 import { defaultEnrollmentDate, validateEnrollment } from "../../../../../lib/enrollment-fields";
 import { loadStudent } from "../../../../../lib/student-data";
 
@@ -19,7 +19,7 @@ function errorResponse(message, status, extra = {}) {
 
 export async function PUT(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
 
     const { id } = await params;

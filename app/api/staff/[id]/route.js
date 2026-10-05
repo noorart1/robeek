@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { requireAdmin, requireFinance } from "../../../../lib/auth";
+import { requireFinance } from "../../../../lib/auth";
 import { errorResponse, readBody, renameStaff } from "../../../../lib/users";
 import { checkStaff, formatSalary, formatSalaryPayment, formatStaff, netSalary, payChange, salaryPaid } from "../../../../lib/staff";
 import { iraqToday } from "../../../../lib/dates";
@@ -61,7 +61,7 @@ export async function GET(request, { params }) {
 
 export async function PATCH(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries", true);
     if (response) return response;
 
     const id = await staffId(params);
@@ -117,7 +117,7 @@ export async function PATCH(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries", true);
     if (response) return response;
 
     const id = await staffId(params);

@@ -1,6 +1,6 @@
 
 import prisma from "../../../../../lib/prisma";
-import { requireAdmin } from "../../../../../lib/auth";
+import { requireOffice } from "../../../../../lib/auth";
 import {
   MAX_PHOTO_BYTES,
   deletePhoto,
@@ -37,7 +37,7 @@ async function getStudentId(params) {
 
 export async function GET(request, { params }) {
   try {
-    const { response } = await requireAdmin();
+    const { response } = await requireOffice();
     if (response) return response;
 
     const studentId = await getStudentId(params);
@@ -77,7 +77,7 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
-    const { response } = await requireAdmin();
+    const { response } = await requireOffice();
     if (response) return response;
 
     const studentId = await getStudentId(params);
@@ -140,7 +140,7 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const { response } = await requireAdmin();
+    const { response } = await requireOffice();
     if (response) return response;
 
     const studentId = await getStudentId(params);

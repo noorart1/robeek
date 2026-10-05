@@ -15,7 +15,7 @@ export async function GET() {
   try {
     const user = await getCurrentUser();
 
-    if (!user || (user.role !== "ADMIN" && user.role !== "TEACHER")) {
+    if (!user || !["ADMIN", "DEPUTY", "TEACHER"].includes(user.role)) {
       return Response.json(
         { error: "ليس لديك صلاحية الوصول." },
         { status: 401 }

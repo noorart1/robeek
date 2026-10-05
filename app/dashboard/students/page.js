@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // ?class=<id> and ?review=1 preset the table's filters (links from the
 // dashboard); ?term=summer shows الدورة الصيفية. The year is the header's.
 export default async function StudentsPage({ searchParams }) {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
 
   const params = await searchParams;
 

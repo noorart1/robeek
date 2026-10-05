@@ -84,7 +84,7 @@ export default function UsersManager() {
     <main style={{ maxWidth: "1000px", margin: "24px auto", padding: "0 20px" }}>
       <h1 style={{ color: "#1e40af", marginBottom: "4px" }}>المستخدمون</h1>
       <p style={{ color: "#64748b", marginTop: 0 }}>
-        المرشدة ترى صفحة الحضور فقط، ولشعبها فقط. المعاون يرى من المالية ما يحدده له المدير فقط. المدير يرى كل شيء.
+        المرشدة ترى صفحة الحضور فقط، ولشعبها فقط. المعاون يرى كل شيء عدا المستخدمين والنسخ الاحتياطي وبدء السنة، ومن المالية (والكادر مع رواتب الموظفين) ما يحدده له المدير فقط. المدير يرى كل شيء.
       </p>
 
       {error && <p role="alert" style={{ color: "#dc2626" }}>{error}</p>}
@@ -286,7 +286,7 @@ function UserForm({ user, self = false, classes, staff, users, onCancel, onSaved
           الصلاحية
           <select value={form.role} disabled={self} onChange={(e) => set("role", e.target.value)} style={{ ...control, ...border("role") }}>
             <option value="TEACHER">مرشدة — الحضور لشعبها فقط</option>
-            <option value="DEPUTY">معاون — أقسام المالية المحددة فقط</option>
+            <option value="DEPUTY">معاون — كل شيء، والمالية حسب الصلاحيات</option>
             <option value="ADMIN">مدير — كل الصلاحيات</option>
           </select>
         </label>

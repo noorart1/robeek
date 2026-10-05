@@ -1,6 +1,6 @@
 
 import prisma from "../../../lib/prisma";
-import { requireAdmin } from "../../../lib/auth";
+import { requireFinance } from "../../../lib/auth";
 import { errorResponse, readBody } from "../../../lib/users";
 import { checkStaff, formatStaff, payChange } from "../../../lib/staff";
 import { yearMonths } from "../../../lib/finance";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries");
     if (response) return response;
 
     const { year, isActive } = await yearView();
@@ -42,7 +42,7 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireFinance("salaries", true);
     if (response) return response;
 
     const body = await readBody(request);

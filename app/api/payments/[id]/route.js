@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { requireAdmin } from "../../../../lib/auth";
+import { requireOffice } from "../../../../lib/auth";
 import { loadStudent } from "../../../../lib/student-data";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ function errorResponse(message, status) {
 
 export async function PATCH(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
 
     const { id } = await params;

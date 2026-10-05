@@ -19,7 +19,8 @@ const card = {
 };
 
 export default async function DashboardPage() {
-  const user = await requirePageUser(["ADMIN"]);
+  const user = await requirePageUser(["ADMIN", "DEPUTY"]);
+  const admin = user.role === "ADMIN";
 
   // The year chosen in the header (lib/year-view.js), the active one by default.
   const { year, summer, isActive } = await yearView();
@@ -136,9 +137,10 @@ export default async function DashboardPage() {
         {year && (
           <p style={{ color: "#64748b", marginTop: 0, display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
             <span>السنة الدراسية <span dir="ltr">{year.name}</span></span>
-            {nextYear && <NewYearButton next={nextYear} current={year.name} locked={nextYearLocked} />}
-            {canStartSummer && <NewYearButton current={year.name} summer={summerName} locked={summerLocked} />}
-            {isActive && pastYears.length > 0 && <Link href="/dashboard/carry-over">⇠ نقل من السنة السابقة</Link>}
+            {/* Starting a year stays an admin's (it empties the sections). */}
+            {admin && nextYear && <NewYearButton next={nextYear} current={year.name} locked={nextYearLocked} />}
+            {admin && canStartSummer && <NewYearButton current={year.name} summer={summerName} locked={summerLocked} />}
+            {admin && isActive && pastYears.length > 0 && <Link href="/dashboard/carry-over">⇠ نقل من السنة السابقة</Link>}
           </p>
         )}
 

@@ -1,6 +1,6 @@
 
 import prisma from "../../../../lib/prisma";
-import { requireAdmin } from "../../../../lib/auth";
+import { requireOffice } from "../../../../lib/auth";
 import { validateField } from "../../../../lib/student-fields";
 import { loadStudent } from "../../../../lib/student-data";
 import { deletePhoto } from "../../../../lib/photos";
@@ -32,7 +32,7 @@ export async function PATCH(request, { params }) {
 
     // بررسی نشست مدیر
 
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
 
     // بررسی شناسه کودک
@@ -212,7 +212,7 @@ export async function PATCH(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const { user, response } = await requireAdmin();
+    const { user, response } = await requireOffice();
     if (response) return response;
 
     const { id } = await params;
