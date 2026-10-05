@@ -422,7 +422,8 @@ export default async function FinancePage({ searchParams }) {
             ["المصروفات", -spent, "#b91c1c"],
             ["صافي الربح", net, "#1d4ed8", true],
             ["صندوق المركز", centreBox, "#0f766e"],
-            ["الخزينة", handovers - withdrawals, "#7c3aed"]
+            // The card: what was handed to الخزينة; its panel below shows what is left.
+            ["الخزينة", handovers, "#7c3aed"]
           ].map(([label, value, color, main]) => (
             <div key={label} style={{ ...panel, borderTop: `4px solid ${color}`, ...(main && { backgroundColor: "#eff6ff" }) }}>
               <div style={{ color: "#64748b", fontSize: "14px" }}>{label}</div>

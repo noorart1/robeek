@@ -4,7 +4,7 @@ import { requirePageUser } from "../../../../../lib/auth";
 import { canFinance } from "../../../../../lib/finance-access";
 import { formatDate } from "../../../../../lib/arabic";
 import { iraqToday } from "../../../../../lib/dates";
-import { PAYMENT_METHODS, SALARY_PAYMENT_TYPES, formatMoney } from "../../../../../lib/labels";
+import { PAYMENT_METHODS, formatMoney, salaryPaymentLabel } from "../../../../../lib/labels";
 import { formatSalary, formatSalaryPayment } from "../../../../../lib/staff";
 import AppHeader from "../../../../../components/AppHeader";
 import PrintButton from "../../../../../components/PrintButton";
@@ -77,7 +77,7 @@ export default async function StaffSalariesPage({ params }) {
                     <td style={cell} dir="ltr">{p.receiptNo || "—"}</td>
                     <td style={cell}>{formatDate(p.paidOn) || "—"}</td>
                     <td style={cell} dir="ltr">{p.month}</td>
-                    <td style={cell}>{SALARY_PAYMENT_TYPES[p.paymentType]}</td>
+                    <td style={cell}>{salaryPaymentLabel(p.paymentType)}</td>
                     <td style={cell}>{PAYMENT_METHODS[p.paymentMethod] || "—"}</td>
                     <td style={money} dir="ltr">{p.paymentType === "REFUND" ? "−" : ""}{formatMoney(p.amount)}</td>
                     <td style={cell}>{p.description || ""}</td>

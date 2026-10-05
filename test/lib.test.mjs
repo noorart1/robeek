@@ -212,17 +212,20 @@ test("salary payment: positive amount, valid month/date/method; voided never cou
   });
   assert.deepEqual([refunded.paid, refunded.remaining], [650000, 50000]);
 
-  // الخصومات / السلف counts towards the salary; a bonus is on top of it.
-  assert.equal(checkSalaryPayment({ ...base, paymentType: "ADVANCE" }).data.paymentType, "ADVANCE");
+  // دفعة counts towards the salary, listed under الخصومات (old ADVANCE
+  // rows too, which can no longer be chosen); a bonus is on top of it.
+  assert.equal(checkSalaryPayment({ ...base, paymentType: "ADVANCE" }).field, "paymentType");
+  assert.equal(checkSalaryPayment({ ...base, paymentType: "INSTALMENT" }).data.paymentType, "INSTALMENT");
   const advanced = formatSalary({
     baseSalary: "700000.00", bonus: null, deduction: "0.00",
     SalaryPayment: [
-      { amount: "100000.00", paymentType: "ADVANCE" },
+      { amount: "100000.00", paymentType: "INSTALMENT" },
+      { amount: "20000.00", paymentType: "ADVANCE" },
       { amount: "50000.00", paymentType: "BONUS" },
-      { amount: "30000.00", paymentType: "ADVANCE", voidedAt: new Date() }
+      { amount: "30000.00", paymentType: "INSTALMENT", voidedAt: new Date() }
     ]
   });
-  assert.deepEqual([advanced.advances, advanced.bonuses, advanced.paid, advanced.remaining], [100000, 50000, 100000, 600000]);
+  assert.deepEqual([advanced.advances, advanced.bonuses, advanced.paid, advanced.remaining], [120000, 50000, 120000, 580000]);
 });
 
 test("pay change: logged only when the salary really changes", async () => {

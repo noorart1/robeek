@@ -259,7 +259,7 @@ model SalaryPayment {
   id            Int       @id @default(autoincrement())
   salaryId      Int
   amount        Decimal   @db.Decimal(15, 2)
-  paymentType   String    @default("SALARY") @db.VarChar(20) // SALARY | BONUS (مكافأة) | REFUND (استرجاع)
+  paymentType   String    @default("SALARY") @db.VarChar(20) // SALARY | INSTALMENT (دفعة) | BONUS (مكافأة) | ADVANCE | REFUND (استرجاع)
   paidOn        DateTime? @db.Date
   paymentMethod String?   @db.VarChar(20)
   receiptNo     String?   @unique

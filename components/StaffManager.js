@@ -6,7 +6,7 @@ import { redirectIfSignedOut, SESSION_EXPIRED } from "./session";
 import { closeOnBackdrop, confirmDiscard } from "./dialog";
 import { formatDate } from "../lib/arabic";
 import { iraqToday } from "../lib/dates";
-import { GENDERS, PAYMENT_METHODS, SALARY_PAYMENT_TYPES, SHIFTS, formatMoney } from "../lib/labels";
+import { GENDERS, PAYMENT_METHODS, SALARY_PAYMENT_TYPES, SHIFTS, formatMoney, salaryPaymentLabel } from "../lib/labels";
 import { CONTRACT_SUGGESTIONS, JOB_SUGGESTIONS } from "../lib/staff";
 
 export async function send(url, method, body) {
@@ -379,7 +379,7 @@ function Salaries({ person, salaries, payments, onChanged, readOnly }) {
                     <td style={{ ...pcell, ...struck }} dir="ltr">{p.receiptNo || "—"}</td>
                     <td style={{ ...pcell, ...struck }}>{formatDate(p.paidOn) || "—"}</td>
                     <td style={{ ...pcell, ...struck }} dir="ltr">{p.month}</td>
-                    <td style={{ ...pcell, ...struck }}>{SALARY_PAYMENT_TYPES[p.paymentType]}</td>
+                    <td style={{ ...pcell, ...struck }}>{salaryPaymentLabel(p.paymentType)}</td>
                     <td style={{ ...pcell, ...struck }}>{PAYMENT_METHODS[p.paymentMethod] || "—"}</td>
                     <td style={{ ...pcell, ...(p.paymentType === "REFUND" && { color: "#b91c1c" }), ...struck, textAlign: "left" }}>
                       {p.paymentType === "REFUND" ? "−" : ""}{formatMoney(p.amount)}

@@ -18,7 +18,7 @@ const amount = (value) => (value ? formatMoney(value) : "—");
 
 // الرواتب: one row per person for the chosen month — what they are due
 // (the person's usual salary until set otherwise), what was paid and what
-// is left, read-only. Payments (راتب، مكافأة، الخصومات / السلف), receipts
+// is left, read-only. Payments (راتب، دفعة، مكافأة), receipts
 // and voiding are in the person's window (click the name).
 // readOnly: listed only (a معاون who may see the tab but not change it).
 // staffEditable: the person's details can be edited in their window
@@ -69,7 +69,7 @@ export default function SalariesBoard({ defaultMonth, readOnly = false, staffEdi
                 <th style={{ ...cell, width: "1%" }}>الاسم</th>
                 <th style={money}>الراتب</th>
                 <th style={money}>المكافأة</th>
-                <th style={money}>الخصومات / السلف</th>
+                <th style={money}>الخصومات / الدفعات</th>
                 <th style={money}>الصافي</th>
                 <th style={money}>المدفوع</th>
                 <th style={money}>الباقي</th>
@@ -136,7 +136,7 @@ export default function SalariesBoard({ defaultMonth, readOnly = false, staffEdi
   );
 }
 
-// What a row shows. الصافي = الراتب + المكافأة − الخصومات / السلف, and
+// What a row shows. الصافي = الراتب + المكافأة − الخصومات / الدفعات, and
 // المدفوع counts bonuses but not advances (they are under الخصومات), so
 // الباقي is the month's own remaining. A month not saved yet is due the
 // person's usual salary.
@@ -157,7 +157,7 @@ function figures(person, salary) {
   };
 }
 
-// Read-only: pay, bonuses and الخصومات / السلف are recorded as payments
+// Read-only: pay, bonuses and دفعات are recorded as payments
 // in the person's window (click the name); the first one saves the month.
 function SalaryRow({ person, salary, onOpen }) {
   const f = figures(person, salary);
