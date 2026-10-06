@@ -3,7 +3,8 @@ import prisma from "../../../../lib/prisma";
 import { requireFinance } from "../../../../lib/auth";
 import { CATEGORY_TAB, canFinance } from "../../../../lib/finance-access";
 import { errorResponse, readBody } from "../../../../lib/users";
-import { checkExpense, formatExpense } from "../../../../lib/finance";
+import { checkBoxMovement, checkExpense, formatExpense, viewRange } from "../../../../lib/finance";
+import { yearView } from "../../../../lib/year-view";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function PATCH(request, { params }) {
     const body = await readBody(request);
     if (!body) return errorResponse("البيانات المرسلة غير صالحة.", 400);
 
-    const current = await prisma.expense.findUnique({ where: { id }, select: { category: true } });
+    const current = await prisma.expense.findUnique({ where: { id }, select: { id: true, category: true, item: true, amount: true } });
     if (!current) return errorResponse("المصروف غير موجود.", 404);
 
     const checked = checkExpense(body, current.category);
@@ -35,6 +36,9 @@ export async function PATCH(request, { params }) {
     if (![current.category, checked.data.category].every((c) => canFinance(user, CATEGORY_TAB[c], true))) {
       return errorResponse("ليس لديك صلاحية الوصول.", 403);
     }
+    // Over the year the finance page shows, as its الصندوق does.
+    const empty = await checkBoxMovement(prisma, viewRange(await yearView()), checked.data, current);
+    if (empty) return errorResponse(empty, 400, { field: "amount" });
 
     const expense = await prisma.expense.update({ where: { id }, data: { ...checked.data, updatedAt: new Date() } });
 
@@ -54,11 +58,13 @@ export async function DELETE(request, { params }) {
     const id = await expenseId(params);
     if (!id) return errorResponse("معرّف المصروف غير صالح.", 400);
 
-    const current = await prisma.expense.findUnique({ where: { id }, select: { category: true } });
+    const current = await prisma.expense.findUnique({ where: { id }, select: { id: true, category: true, item: true, amount: true } });
     if (!current) return errorResponse("المصروف غير موجود.", 404);
     if (!canFinance(user, CATEGORY_TAB[current.category], true)) {
       return errorResponse("ليس لديك صلاحية الوصول.", 403);
     }
+    const empty = await checkBoxMovement(prisma, viewRange(await yearView()), null, current);
+    if (empty) return errorResponse(empty, 400);
 
     await prisma.expense.delete({ where: { id } });
 

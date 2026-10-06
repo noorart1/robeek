@@ -4,9 +4,8 @@ import { requirePageUser } from "../../../lib/auth";
 import { FINANCE_TABS, canFinance } from "../../../lib/finance-access";
 import { SHIFTS, classLabel, formatMoney, summerYearName, yearLabel } from "../../../lib/labels";
 import { formatStudent, overdueViews, studentSelect } from "../../../lib/student-data";
-import { PARTNERS, incomeBreakdown, isHandover, monthlySummary, paidTotals, yearMonths } from "../../../lib/finance";
+import { PARTNERS, boxBalances, isHandover, paidTotals, viewRange } from "../../../lib/finance";
 import { matchesSearch } from "../../../lib/arabic";
-import { salaryAmount } from "../../../lib/staff";
 import { iraqToday } from "../../../lib/dates";
 import { studentView, yearView } from "../../../lib/year-view";
 import Link from "next/link";
@@ -130,10 +129,8 @@ export default async function FinancePage({ searchParams }) {
   // only: a summer course belongs to the year it ends.
   const view = await yearView();
   const { year, isActive: isActiveYear } = view;
-  // The active year runs on until the next one is started.
-  const yearRange = yearMonths(year?.name);
+  const range = viewRange(view);
   const thisMonth = iraqToday().slice(0, 7);
-  const range = yearRange && isActiveYear && thisMonth > yearRange.to ? { ...yearRange, to: thisMonth } : yearRange;
   // The ledgers open on this month, or an earlier year's last.
   const defaultMonth = range && (thisMonth < range.from || thisMonth > range.to) ? range.to : thisMonth;
 
@@ -155,25 +152,9 @@ export default async function FinancePage({ searchParams }) {
 
   // الملخص الشهري: the months of the chosen school year (October to
   // September), or every month when the year's name has no dates in it.
-  const [allPayments, allSalaries, allExpenses] = await Promise.all([
-    prisma.payment.findMany({
-      where: { voidedAt: null },
-      select: { amount: true, paymentType: true, paymentMethod: true, paymentDate: true }
-    }),
-    // Salaries as paid (voided receipts never count), in the month they were
-    // paid, so الصندوق follows the cash. Imported payments have no date:
-    // they stay under the salary's own month.
-    prisma.salaryPayment.findMany({
-      where: { voidedAt: null },
-      select: { amount: true, paymentType: true, paidOn: true, Salary: { select: { month: true } } }
-    }),
-    prisma.expense.findMany({ select: { date: true, category: true, amount: true, item: true } })
-  ]);
-  const months = monthlySummary({
-    payments: allPayments,
-    salaries: allSalaries.map((p) => ({ month: p.paidOn ? dayMonth(p.paidOn) : p.Salary.month, net: salaryAmount(p) })),
-    expenses: allExpenses
-  }).filter((m) => !range || (m.month >= range.from && m.month <= range.to));
+  const {
+    allExpenses, months, monthTotal, income, received, totalIncome, spent, handovers, withdrawals, centreBox, treasury
+  } = await boxBalances(prisma, range);
   const showUnknown = months.some((m) => m.unknown);
   const monthColumns = [
     ["cash", "وارد نقدي"],
@@ -188,32 +169,17 @@ export default async function FinancePage({ searchParams }) {
     ["handovers", "تسليم الخزينة"],
     ["withdrawals", "سحب الشركاء"]
   ];
-  const monthTotal = (key) => months.reduce((sum, m) => sum + m[key], 0);
 
-  // الصندوق وحصص الشركاء: صافي الربح = الإيرادات − المصروفات; each partner
-  // is due their share of it. تسليم الخزينة moves money from صندوق المركز
-  // to الخزينة, and the partners draw (سحب …) from الخزينة: صندوق المركز =
-  // إجمالي الإيرادات − المصروفات − تسليم الخزينة, الخزينة = تسليم الخزينة −
-  // سحب الشركاء. Both cover the chosen year only.
+  // الحصص: صافي الربح = الإيرادات − المصروفات; each partner is due their
+  // share of it. Both cover the chosen year only.
   const net = monthTotal("net");
-  const handovers = monthTotal("handovers");
   const inRange = (e) => !range || (dayMonth(e.date) >= range.from && dayMonth(e.date) <= range.to);
-  const withdrawals = monthTotal("withdrawals");
   const draws = allExpenses.filter((e) => e.category === "WITHDRAWAL" && !isHandover(e) && inRange(e));
   const partners = PARTNERS.map((p) => {
     const taken = draws.filter((e) => matchesSearch(e.item, p.name)).reduce((t, e) => t + Number(e.amount), 0);
     return { ...p, due: net * p.share, taken, left: net * p.share - taken };
   });
   const unassigned = withdrawals - partners.reduce((t, p) => t + p.taken, 0);
-
-  // الإيرادات والأرباح: the same totals as «الملخص», income split by kind.
-  const income = incomeBreakdown(allPayments, (m) => !range || (m >= range.from && m <= range.to));
-  const received = income.cash + income.card + income.unknown + income.curriculum;
-  // إجمالي الإيرادات: children's receipts (tuition, curriculum and uniform)
-  // less their refunds; وارد آخر is not part of it.
-  const totalIncome = received - income.refunds;
-  const spent = monthTotal("salaries") + monthTotal("expenses") + monthTotal("assets");
-  const centreBox = totalIncome - spent - handovers;
 
   const enrollmentSelect = {
     tuitionFee: true,
@@ -475,7 +441,7 @@ export default async function FinancePage({ searchParams }) {
               ["تسليم الخزينة (من صندوق المركز)", handovers],
               ...partners.map((p) => [`سحب ${p.name}`, -p.taken]),
               ...(unassigned ? [["سحب لا يحمل اسم شريك", -unassigned]] : []),
-              ["الباقي", handovers - withdrawals, true]
+              ["الباقي", treasury, true]
             ], "الخزينة = تسليم الخزينة − سحب الشركاء."]
           ].map(([title, rows, note]) => (
             <section key={title} style={panel}>

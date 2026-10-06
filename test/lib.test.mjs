@@ -441,3 +441,35 @@ test("finance access: a معاون sees only the tabs given, writes only where a
   assert.equal(checkFinanceAccess({ summary: "constructor" }).field, "financeAccess");
   assert.equal(canFinance({ role: "DEPUTY", financeAccess: '{"summary":"constructor"}' }, "summary"), false);
 });
+
+test("a box movement may not take more than its box holds", async () => {
+  const { checkBoxMovement } = await import("../lib/finance.js");
+  const client = (expenses) => ({
+    payment: { findMany: async () => [{ amount: 1000, paymentType: "TUITION", paymentMethod: "CASH", paymentDate: "2026-10-02" }] },
+    salaryPayment: { findMany: async () => [] },
+    expense: { findMany: async ({ where } = {}) => expenses.filter((e) => !where || e.id !== where.id.not) }
+  });
+  const range = { from: "2026-10", to: "2027-09" };
+  const handover = { date: new Date("2026-10-03"), category: "WITHDRAWAL", item: "تسليم الخزينة", amount: 1000 };
+  const draw = { date: new Date("2026-10-04"), category: "WITHDRAWAL", item: "سحب البراق", amount: 400 };
+
+  // صندوق المركز 1000, الخزينة 0.
+  assert.equal(await checkBoxMovement(client([]), range, handover), null);
+  assert.match(await checkBoxMovement(client([]), range, draw), /الخزينة/);
+  // صندوق المركز 0, الخزينة 1000.
+  assert.match(await checkBoxMovement(client([handover]), range, handover), /صندوق المركز/);
+  assert.equal(await checkBoxMovement(client([handover]), range, draw), null);
+  // Not more than the box holds: 1000 handed over, 1000 + 1 drawn.
+  assert.equal(await checkBoxMovement(client([handover]), range, { ...draw, amount: 1000 }), null);
+  assert.match(await checkBoxMovement(client([handover]), range, { ...draw, amount: 1001 }), /الخزينة/);
+  assert.match(await checkBoxMovement(client([]), range, { ...handover, amount: 1001 }), /صندوق المركز/);
+  // A handover الخزينة has spent is not deleted or cut below what was drawn.
+  const spent = { ...handover, id: 1 };
+  const client2 = client([spent, draw]);
+  assert.match(await checkBoxMovement(client2, range, null, spent), /الخزينة/);
+  assert.match(await checkBoxMovement(client2, range, { ...handover, amount: 399 }, spent), /الخزينة/);
+  assert.equal(await checkBoxMovement(client2, range, { ...handover, amount: 400 }, spent), null);
+  assert.equal(await checkBoxMovement(client2, range, null, { ...draw, id: 2 }), null);
+  // Other categories are not movements.
+  assert.equal(await checkBoxMovement(client([handover]), range, { ...draw, category: "GENERAL" }), null);
+});

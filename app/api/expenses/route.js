@@ -4,7 +4,8 @@ import { requireFinance } from "../../../lib/auth";
 import { CATEGORY_TAB, canFinance } from "../../../lib/finance-access";
 import { errorResponse, readBody } from "../../../lib/users";
 import { isMonth } from "../../../lib/staff";
-import { checkExpense, formatExpense } from "../../../lib/finance";
+import { checkBoxMovement, checkExpense, formatExpense, viewRange } from "../../../lib/finance";
+import { yearView } from "../../../lib/year-view";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +53,9 @@ export async function POST(request) {
     if (!canFinance(user, CATEGORY_TAB[checked.data.category], true)) {
       return errorResponse("ليس لديك صلاحية الوصول.", 403);
     }
+    // Over the year the finance page shows, as its الصندوق does.
+    const empty = await checkBoxMovement(prisma, viewRange(await yearView()), checked.data);
+    if (empty) return errorResponse(empty, 400, { field: "amount" });
 
     const expense = await prisma.expense.create({ data: { ...checked.data, updatedAt: new Date() } });
 
