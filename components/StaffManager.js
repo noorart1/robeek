@@ -216,7 +216,6 @@ export function StaffDialog({ id, jobs, onClose, onChanged, readOnly = false, st
               onCancel={requestClose}
               onDirtyChange={(value) => { dirty.current = value; }}
               onSaved={() => { dirty.current = []; changed(); }}
-              onDeleted={() => { onChanged(); onClose(); }}
             /> : (
               <h2 style={{ color: "#1e40af", margin: "0 0 12px" }}>
                 {data.staff.name}
@@ -517,7 +516,7 @@ const FIELDS = [
   ["contract", "العقد", { list: "staff-contract", maxLength: 191, placeholder: "نعم / لا أو تفاصيل" }]
 ];
 
-function StaffForm({ person, jobs, onCancel, onSaved, onDeleted = onSaved, onDirtyChange }) {
+function StaffForm({ person, jobs, onCancel, onSaved, onDirtyChange }) {
   const isNew = !person;
   const [initial] = useState(() => {
     const values = { notes: person?.notes ?? "", isActive: person?.isActive ?? true };
@@ -555,18 +554,6 @@ function StaffForm({ person, jobs, onCancel, onSaved, onDeleted = onSaved, onDir
     } catch (err) {
       setError({ message: err.message, field: err.field });
     } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    if (!window.confirm(`حذف ${person.name} نهائياً؟`)) return;
-    setBusy(true);
-    try {
-      await send(`/api/staff/${person.id}`, "DELETE");
-      onDeleted();
-    } catch (err) {
-      setError({ message: err.message });
       setBusy(false);
     }
   }
@@ -629,11 +616,6 @@ function StaffForm({ person, jobs, onCancel, onSaved, onDeleted = onSaved, onDir
           {busy ? "جارٍ الحفظ..." : "حفظ"}
         </button>
         <button type="button" disabled={busy} onClick={onCancel}>إلغاء</button>
-        {!isNew && (
-          <button type="button" disabled={busy} onClick={remove} style={{ marginInlineStart: "auto", color: "#b91c1c" }}>
-            حذف
-          </button>
-        )}
       </div>
     </form>
   );

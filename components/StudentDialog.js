@@ -121,7 +121,6 @@ export default function StudentDialog({
   onClose,
   onSaved,
   onCreated,
-  onDeleted,
   onFamilyChanged,
   onEditingChange
 }) {
@@ -317,35 +316,6 @@ export default function StudentDialog({
     } catch (err) {
       setError(err.message || "حدث خطأ في الاتصال بالخادم.");
     } finally {
-      setSaving(false);
-    }
-  }
-
-  // Permanent. The message steers people who only want to record that a
-  // child left towards «غير نشط», which keeps the payment history.
-  async function deleteStudent() {
-    if (saving) return;
-
-    const payments = student.enrollment?.payments.length || 0;
-    const message = [
-      `حذف «${fullName(student)}» نهائياً؟`,
-      "",
-      `سيتم حذف بيانات الطفل وتسجيله${payments ? ` و${payments} دفعات` : ""} وسجل الحضور والصورة، ولا يمكن التراجع عن ذلك.`,
-      "",
-      "إذا كان الطفل قد ترك الروضة فالأفضل تغيير الحالة إلى «غير نشط» للاحتفاظ بسجله المالي."
-    ].join("\n");
-
-    if (!window.confirm(message)) return;
-
-    setSaving(true);
-    setError("");
-
-    try {
-      const { response, data } = await send(`/api/students/${student.id}`, "DELETE");
-      if (!response.ok) throw new Error(data.error || "تعذر حذف الطفل.");
-      onDeleted(student.id);
-    } catch (err) {
-      setError(err.message);
       setSaving(false);
     }
   }
@@ -778,24 +748,6 @@ export default function StudentDialog({
             إغلاق
           </button>
 
-          {!isNew && (
-          <button
-            type="button"
-            onClick={deleteStudent}
-            disabled={saving}
-            style={{
-              marginInlineStart: "auto",
-              padding: "10px 16px",
-              borderRadius: "8px",
-              border: "1px solid #fecaca",
-              backgroundColor: "#ffffff",
-              color: "#b91c1c",
-              cursor: "pointer"
-            }}
-          >
-            حذف الطفل
-          </button>
-          )}
         </div>
       </div>
     </dialog>
