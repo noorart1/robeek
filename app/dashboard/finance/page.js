@@ -419,7 +419,7 @@ export default async function FinancePage({ searchParams }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "12px", marginBottom: "20px" }}>
           {[
             ["إجمالي الإيرادات", totalIncome, "#15803d"],
-            ["المصروفات", -spent, "#b91c1c"],
+            ["إجمالي المصروفات", -spent, "#b91c1c"],
             ["صافي الربح", net, "#1d4ed8", true],
             ["صندوق المركز", centreBox, "#0f766e"],
             // The card: what was handed to الخزينة; its panel below shows what is left.
