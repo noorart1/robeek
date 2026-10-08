@@ -175,6 +175,37 @@ test("payments: Arabic digits, a numbered receipt, refunds within what was paid,
   assert.ok(kept.voidedAt);
 });
 
+test("payments: a receipt is edited under its own number, within the refund rule", { skip }, async () => {
+  signedIn();
+  const paid = await call(studentPayments.POST, "POST", { amount: 100000 }, made.student.id);
+  const id = paid.body.payment.id;
+  const edit = (body) => call(paymentVoid.PATCH, "PATCH", {
+    amount: 100000, paymentType: "TUITION", paymentMethod: "CASH", paymentDate: "2026-09-01", ...body
+  }, id);
+
+  assert.equal((await edit({ amount: "abc" })).status, 400);
+  assert.equal((await edit({ paymentDate: "2026-02-30" })).body.field, "paymentDate");
+
+  const edited = await edit({ amount: "١٥٠٬٠٠٠", paymentMethod: "CARD", description: "تصحيح" });
+  assert.equal(edited.status, 200);
+  const row = await prisma.payment.findUnique({ where: { id } });
+  assert.equal(Number(row.amount), 150000);
+  assert.equal(row.paymentMethod, "CARD");
+  assert.equal(row.description, "تصحيح");
+  assert.equal(row.receiptNo, paid.body.payment.receiptNo);
+  assert.equal(row.paymentDate.toISOString().slice(0, 10), "2026-09-01");
+
+  // Refund everything paid so far: cutting this receipt now is refused.
+  const { paidTotals } = await import("../lib/finance.js");
+  const paidNow = paidTotals(await prisma.payment.findMany({ where: { enrollmentId: made.enrollment.id } })).tuition;
+  assert.equal((await call(studentPayments.POST, "POST", { amount: paidNow, paymentType: "REFUND" }, made.student.id)).status, 201);
+  assert.equal((await edit({ amount: 149000 })).status, 400);
+  assert.equal((await edit({ amount: 160000 })).status, 200);
+
+  assert.equal((await call(paymentVoid.PATCH, "PATCH", { void: true }, id)).status, 200);
+  assert.equal((await edit({})).status, 409);
+});
+
 test("payments: saved at the same moment, they never share a receipt number", { skip }, async () => {
   signedIn();
   const results = await Promise.all(
@@ -223,4 +254,36 @@ test("salary payments: within the salary, bonuses on top, refunds within what wa
   // refunded (50,000), so it is allowed; voiding it twice is not.
   assert.equal((await call(salaryVoid.PATCH, "PATCH", { void: true }, first.body.payment.id)).status, 200);
   assert.equal((await call(salaryVoid.PATCH, "PATCH", { void: true }, first.body.payment.id)).status, 409);
+});
+
+// A summer course chosen on its own (lib/year-view.js) is the child's
+// enrollment, and carries no debt of the school year.
+test("formatStudent: a summer course on its own leaves the school year out", async () => {
+  const { formatStudent } = await import("../lib/student-data.js");
+  const year = (id, name, kind, isActive) => ({ id, name, kind, isActive });
+  const enrollment = (id, AcademicYear, fee, paid) => ({
+    id, AcademicYear, tuitionFee: fee, paymentPlan: "YEARLY", enrollmentDate: new Date("2025-10-01"),
+    status: "ACTIVE", attendanceType: null, Class: { id, name: "A", shift: "MORNING" },
+    Payment: paid ? [{ amount: paid, paymentType: "TUITION", voidedAt: null }] : []
+  });
+  const student = {
+    id: 1, StudentParent: [], TransportLine: null,
+    Enrollment: [
+      enrollment(1, year(1, "2024-2025", "REGULAR", false), 900000, 0),
+      enrollment(2, year(2, "صيف 2025", "SUMMER", false), 200000, 0),
+      enrollment(3, year(3, "2025-2026", "REGULAR", true), 1000000, 0),
+      enrollment(4, year(4, "صيف 2026", "SUMMER", true), 300000, 100000)
+    ]
+  };
+
+  const summer = formatStudent(student, { yearId: 4, summerId: null });
+  assert.equal(summer.enrollment.id, 4);
+  assert.equal(summer.summer, null);
+  assert.equal(summer.financial.remaining, 200000);
+  // Only the earlier summer's debt, never a school year's.
+  assert.deepEqual(summer.financial.previousDue.map((d) => d.year), ["صيف 2025"]);
+
+  const school = formatStudent(student, { yearId: 3, summerId: 4 });
+  assert.equal(school.enrollment.id, 3);
+  assert.equal(school.summer.enrollment.id, 4);
 });

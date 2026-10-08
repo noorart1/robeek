@@ -2,8 +2,8 @@
 import prisma from "../../../lib/prisma";
 import { requirePageUser } from "../../../lib/auth";
 import { FINANCE_TABS, canFinance } from "../../../lib/finance-access";
-import { SHIFTS, classLabel, formatMoney, summerYearName, yearLabel } from "../../../lib/labels";
-import { formatStudent, overdueViews, studentSelect } from "../../../lib/student-data";
+import { SHIFTS, classLabel, formatMoney, yearLabel } from "../../../lib/labels";
+import { formatStudent, studentSelect } from "../../../lib/student-data";
 import { PARTNERS, boxBalances, isHandover, paidTotals, viewRange } from "../../../lib/finance";
 import { matchesSearch } from "../../../lib/arabic";
 import { iraqToday } from "../../../lib/dates";
@@ -125,8 +125,8 @@ export default async function FinancePage({ searchParams }) {
     );
   }
 
-  // The school year chosen in the header (lib/year-view.js). School years
-  // only: a summer course belongs to the year it ends.
+  // The year chosen in the header (lib/year-view.js): a school year, or a
+  // summer course on its own (May to August).
   const view = await yearView();
   const { year, isActive: isActiveYear } = view;
   const range = viewRange(view);
@@ -189,14 +189,9 @@ export default async function FinancePage({ searchParams }) {
     // Voided receipts never count.
     Payment: { where: { voidedAt: null }, select: { amount: true, paymentType: true } }
   };
-  // The summer course that closes this year: «صيف 2026» for 2025-2026.
-  const summerName = year && /^\d{4}-(\d{4})$/.test(year.name) ? summerYearName(year.name.slice(5)) : null;
-  const [enrollments, summerEnrollments] = await Promise.all([
-    year ? prisma.enrollment.findMany({ where: { academicYearId: year.id }, select: enrollmentSelect }) : [],
-    summerName ? prisma.enrollment.findMany({ where: { AcademicYear: { name: summerName } }, select: enrollmentSelect }) : []
-  ]);
-  const summerTotals = emptyTotals();
-  for (const enrollment of summerEnrollments) add(summerTotals, enrollment);
+  // The chosen year's only: a summer course has its own page (the header's
+  // picker).
+  const enrollments = year ? await prisma.enrollment.findMany({ where: { academicYearId: year.id }, select: enrollmentSelect }) : [];
 
   // Overdue as of today: the children here now, or everyone enrolled in an
   // earlier year, owing for it.
@@ -207,7 +202,7 @@ export default async function FinancePage({ searchParams }) {
     })
   )
     .map((s) => formatStudent(s, studentView(view)))
-    .flatMap(overdueViews);
+    .filter((s) => s.financial.overdue > 0);
   const overdueTotal = overdue.reduce((sum, s) => sum + s.financial.overdue, 0);
 
   const byShift = {};
@@ -266,7 +261,7 @@ export default async function FinancePage({ searchParams }) {
           الملف المالي والأرصدة
         </h1>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", color: "#64748b", marginBottom: "12px" }}>
-          السنة الدراسية: <span dir="ltr">{year?.name ?? "لا توجد سنة دراسية"}</span>
+          {year ? yearLabel(year.name) : "لا توجد سنة دراسية"}
           <span style={{ marginInlineStart: "auto" }}>المبالغ بالدينار العراقي</span>
         </div>
 
@@ -315,7 +310,6 @@ export default async function FinancePage({ searchParams }) {
                 remaining={grand.fee - grand.paid - (inactive.fee - inactive.paid)}
                 strong
               />
-              {summerTotals.students > 0 && <Row label={yearLabel(summerName)} totals={summerTotals} />}
             </tbody>
           </table>
         </div>
@@ -336,7 +330,7 @@ export default async function FinancePage({ searchParams }) {
         <h2 style={{ fontSize: "18px", color: "#1e40af", marginBottom: "4px" }}>الملخص الشهري</h2>
         <p style={{ color: "#64748b", marginTop: 0, fontSize: "13px" }}>
           {range && <>من <span dir="ltr">{range.from}</span> إلى <span dir="ltr">{range.to}</span>. </>}
-          الوارد حسب تاريخ الوصل (أقساط ومنهج، بدون الملغاة)؛ الرواتب حسب تاريخ دفعها (بدون الملغاة؛ المنقولة بلا تاريخ حسب شهرها)؛ الصافي = الوارد + وارد آخر − الاسترجاع − رواتب الموظفين − مصاريف عامة − مصاريف ثابتة.
+          الوارد حسب تاريخ الوصل (أقساط ومنهج، بدون الملغاة)، {range?.summerId ? "ويشمل كل دفعات الدورة الصيفية أيّاً كان شهرها" : "بدون دفعات الدورة الصيفية"}؛ الرواتب حسب تاريخ دفعها (بدون الملغاة؛ المنقولة بلا تاريخ حسب شهرها)؛ الصافي = الوارد + وارد آخر − الاسترجاع − رواتب الموظفين − مصاريف عامة − مصاريف ثابتة.
           تسليم الخزينة وسحب الشركاء لا يُطرحان من الصافي.
           {showUnknown && " «غير محدد»: دفعات سُجّلت قبل إضافة نوع الدفع."}
         </p>

@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { formatDate } from "../../../../lib/arabic";
 import { iraqToday } from "../../../../lib/dates";
 import { PAYMENT_PLANS, SHIFTS, classLabel, formatMoney, fullName } from "../../../../lib/labels";
-import { formatStudent, overdueViews, studentSelect } from "../../../../lib/student-data";
+import { formatStudent, studentSelect } from "../../../../lib/student-data";
 import { studentView, yearView } from "../../../../lib/year-view";
 import AppHeader from "../../../../components/AppHeader";
 
@@ -26,7 +26,7 @@ function reminder(student) {
   return (
     `السلام عليكم،\n` +
     `نود تذكيركم بأن قسط الطفل/ة ${fullName(student)}` +
-    `${cls ? ` (${classLabel(cls)})` : ""}${student.term === "summer" ? " في الدورة الصيفية" : ""} في مركز روبيك للتعليم المبكر ` +
+    `${cls ? ` (${classLabel(cls)})` : ""}${student.enrollment?.academicYear?.kind === "SUMMER" ? " في الدورة الصيفية" : ""} في مركز روبيك للتعليم المبكر ` +
     `متأخر بمبلغ ${formatMoney(student.financial.overdue)} دينار عراقي.\n` +
     `يرجى تسديده في أقرب وقت. شكراً لتعاونكم.`
   );
@@ -62,9 +62,9 @@ const cell = { padding: "8px 10px", borderBottom: "1px solid #e2e8f0", textAlign
 const money = { ...cell, textAlign: "left", fontVariantNumeric: "tabular-nums" };
 
 // المتأخرون عن الدفع: children whose paid tuition is below what their
-// instalment plan says was due by today (lib/dues.js). A child behind on
-// both the school year and the summer course has a row for each. For an
-// earlier year chosen in the header: everyone enrolled in it, for it.
+// instalment plan says was due by today (lib/dues.js). For a year chosen
+// in the header (an earlier one, or a summer course on its own): everyone
+// enrolled in it, for it.
 export default async function OverduePage({ searchParams }) {
   const user = await requirePageUser(["ADMIN", "DEPUTY"]);
   // A معاون: only with «الملخص» in المالية.
@@ -76,12 +76,12 @@ export default async function OverduePage({ searchParams }) {
     await prisma.student.findMany({
       where: view.isActive
         ? { status: "ACTIVE" }
-        : { Enrollment: { some: { academicYearId: { in: [view.year.id, view.summer?.id ?? -1] } } } },
+        : { Enrollment: { some: { academicYearId: view.year.id } } },
       select: studentSelect
     })
   )
     .map((s) => formatStudent(s, studentView(view)))
-    .flatMap(overdueViews)
+    .filter((s) => s.financial.overdue > 0)
     .filter((s) => !shift || s.enrollment?.class?.shift === shift)
     .sort((a, b) => b.financial.overdue - a.financial.overdue);
 
@@ -141,14 +141,13 @@ export default async function OverduePage({ searchParams }) {
             </thead>
             <tbody>
               {students.map((s, index) => (
-                <tr key={`${s.id}-${s.term ?? ""}`}>
+                <tr key={s.id}>
                   <td style={{ ...cell, color: "#94a3b8" }}>{index + 1}</td>
                   <td style={{ ...cell, fontWeight: 600 }}>
                     {fullName(s)} <small style={{ color: "#94a3b8" }}>{s.studentCode}</small>
                   </td>
                   <td style={cell}>
                     {classLabel(s.enrollment?.class)}
-                    {s.term === "summer" && <span style={{ color: "#ea580c" }}> (الصيفية)</span>}
                   </td>
                   <td style={cell}>
                     {PAYMENT_PLANS[s.enrollment?.paymentPlan] || (

@@ -39,16 +39,8 @@ export default async function DashboardPage() {
   // who was enrolled then.
   const here = isActive ? { Student: { status: "ACTIVE" } } : {};
   const inYear = isActive ? { status: "ACTIVE" } : { Enrollment: { some: { academicYearId: year?.id ?? -1 } } };
-  const sectionSelect = {
-    id: true,
-    name: true,
-    shift: true,
-    teacherName: true,
-    staffId: true,
-    _count: { select: { Enrollment: { where: here } } }
-  };
 
-  const [classes, summerClasses, activeStudents, inactiveStudents, needsReview, totalParents, todayRecords, pastYears, staff] =
+  const [classes, activeStudents, inactiveStudents, needsReview, totalParents, todayRecords, pastYears, staff] =
     await Promise.all([
       prisma.class.findMany({
         where: year ? { academicYearId: year.id } : undefined,
@@ -66,9 +58,6 @@ export default async function DashboardPage() {
         },
         orderBy: { name: "asc" }
       }),
-      summer
-        ? prisma.class.findMany({ where: { academicYearId: summer.id }, select: sectionSelect, orderBy: [{ shift: "desc" }, { name: "asc" }] })
-        : [],
       prisma.student.count({ where: inYear }),
       // The running year's children who have left (enrolled, not ACTIVE).
       isActive ? prisma.student.count({ where: { status: { not: "ACTIVE" }, Enrollment: { some: { academicYearId: year?.id ?? -1 } } } }) : 0,
@@ -136,7 +125,7 @@ export default async function DashboardPage() {
         </h1>
         {year && (
           <p style={{ color: "#64748b", marginTop: 0, display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-            <span>السنة الدراسية <span dir="ltr">{year.name}</span></span>
+            <span>{yearLabel(year.name)}</span>
             {/* Starting a year stays an admin's (it empties the sections). */}
             {admin && nextYear && <NewYearButton next={nextYear} current={year.name} locked={nextYearLocked} />}
             {admin && canStartSummer && <NewYearButton current={year.name} summer={summerName} locked={summerLocked} />}
@@ -238,42 +227,16 @@ export default async function DashboardPage() {
           })}
         </section>
 
+        {/* The summer course has pages of its own: chosen like a year
+            (/dashboard/year; a plain <a>, never a prefetching <Link>). */}
         {summer && (
           <section style={{ ...card, marginTop: "18px", borderTop: "4px solid #ea580c" }}>
-            <h2 style={{ margin: "0 0 10px", fontSize: "18px", color: "#ea580c", display: "flex", gap: "12px", alignItems: "baseline" }}>
+            <h2 style={{ margin: 0, fontSize: "18px", color: "#ea580c", display: "flex", gap: "12px", alignItems: "baseline" }}>
               {yearLabel(summer.name)}
-              <Link href="/dashboard/students?term=summer" style={{ fontSize: "14px", fontWeight: "normal" }}>الأطفال والدفعات ←</Link>
+              <a href={`/dashboard/year?id=${summer.id}&to=/dashboard`} style={{ fontSize: "14px", fontWeight: "normal" }}>
+                عرض الدورة الصيفية ←
+              </a>
             </h2>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <tbody>
-                {summerClasses.filter((cls) => cls._count.Enrollment > 0 || cls.shift === "MORNING").map((cls) => (
-                  <tr key={cls.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: "7px 0" }}>
-                      <Link href={`/dashboard/students?term=summer&class=${cls.id}`} style={{ color: "#1e293b", textDecoration: "none" }}>
-                        {SHIFTS[cls.shift]} — الشعبة {cls.name}
-                      </Link>
-                    </td>
-                    <td>
-                      <TeacherCell classId={cls.id} teacherName={cls.teacherName} staffId={cls.staffId} staff={staff} sectionName={`الصيفية ${SHIFTS[cls.shift]} ${cls.name}`} />
-                    </td>
-                    {schoolDay && (
-                      <td style={{ fontSize: "13px" }}>
-                        <TodayAttendance counts={attendanceByClass[cls.id]} total={cls._count.Enrollment} />
-                      </td>
-                    )}
-                    <td style={{ textAlign: "left", fontWeight: "bold" }}>{cls._count.Enrollment}</td>
-                  </tr>
-                ))}
-                <tr>
-                  <td style={{ padding: "8px 0", fontWeight: "bold" }}>المجموع</td>
-                  <td />
-                  {schoolDay && <td />}
-                  <td style={{ textAlign: "left", fontWeight: "bold", color: "#ea580c" }}>
-                    {summerClasses.reduce((sum, cls) => sum + cls._count.Enrollment, 0)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
           </section>
         )}
 

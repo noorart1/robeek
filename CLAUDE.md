@@ -339,6 +339,10 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
   separately, and **voided payments never count**.
 - **Payments are never deleted, only voided** (`PATCH /api/payments/[id]
   { void: true }`): a printed receipt keeps its number and stays listed.
+  A receipt that is not voided can be edited (amount, type, method, note,
+  date: the same `PATCH` without `void`, validated by `checkPayment` in
+  `lib/finance.js` as when it was recorded); it keeps its number and its
+  year, and may not leave more refunded than paid.
   Receipt numbers (`2526-0001`) come from the `Sequence` table, not
   `MAX(receiptNo)`, so a number is never reused. Imported payments have no
   number. Receipts print from `/dashboard/receipts/[id]` (amount in words:
@@ -361,10 +365,21 @@ edited — preserve that behaviour when touching `StudentsTable.js`.
 - **الدورة الصيفية** (May–August) is an `AcademicYear` of `kind` SUMMER
   named «صيف 2026», active beside the REGULAR year (one active of each).
   Started from the dashboard between 1 April and 31 August: it copies the
-  school year's sections, enrolls nobody. A child's summer enrollment is
-  `formatStudent(...).summer` (`{ enrollment, financial }`); the students
-  table's `?term=summer` view swaps it in, and the school-year view hides
-  summer-only children. Monthly instalments run to August, YEARLY is the
+  school year's sections, enrolls nobody. **Its data is kept apart from
+  the school year:** it is chosen on its own in the header's year picker
+  (`yearView()` → `isSummer`, the summer as `year`), and then every page —
+  children, finance, المتأخرون, attendance, the dashboard — shows only it;
+  the school-year view shows none of it (no summer rows, sections or
+  debts) except the dialog's «register for the summer». In the box and
+  the monthly summary a child's payment counts under its enrollment's
+  year, not its date: the summer view has all of the summer's (whatever
+  month), the school-year view none of them (`viewRange` in
+  `lib/finance.js`). Salaries and expenses have no year and go by date
+  (the summer view: May–August).
+  `?term=summer` links switch to it. In the school-year view a child's
+  summer enrollment is `formatStudent(...).summer` (for that dialog); the
+  school-year view hides summer-only children. Teachers (no picker) get
+  their summer sections beside the others. Monthly instalments run to August, YEARLY is the
   whole fee at the start (`lib/dues.js`); receipts are `SU26-0001`. The
   finance page counts a summer under the school year it ends. Always use
   `activeAcademicYear(client, kind)` — never `findFirst({ isActive })`.

@@ -757,7 +757,10 @@ export default function StudentDialog({
 // الدفعات: each payment is saved immediately, separately from the form.
 function Payments({ student, onSaved, disabled }) {
   // enrollmentId "": the current year; otherwise an earlier year's debt.
-  const [draft, setDraft] = useState({ amount: "", paymentType: "TUITION", paymentMethod: "CASH", description: "", enrollmentId: "" });
+  const blank = { amount: "", paymentType: "TUITION", paymentMethod: "CASH", description: "", enrollmentId: "" };
+  const [draft, setDraft] = useState(blank);
+  // The payment being edited in the same form (its id), or null.
+  const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // The payment just recorded, offered for printing.
@@ -774,6 +777,16 @@ function Payments({ student, onSaved, disabled }) {
     setError("");
 
     try {
+      if (editing) {
+        // تعديل وصل: same number, same year.
+        const { response, data } = await send(`/api/payments/${editing}`, "PATCH", draft);
+        if (!response.ok) throw new Error(data.error || "تعذر حفظ التعديل.");
+        onSaved(data.student);
+        setEditing(null);
+        setDraft(blank);
+        return;
+      }
+
       // Always the enrollment shown (the summer course's in its view).
       const { response, data } = await send(`/api/students/${student.id}/payments`, "POST", {
         ...draft,
@@ -789,6 +802,26 @@ function Payments({ student, onSaved, disabled }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function startEdit(payment) {
+    setError("");
+    setLastReceipt(null);
+    setEditing(payment.id);
+    setDraft({
+      amount: String(payment.amount),
+      paymentType: payment.paymentType || "TUITION",
+      paymentMethod: payment.paymentMethod || "CASH",
+      description: payment.description || "",
+      enrollmentId: "",
+      paymentDate: String(payment.paymentDate).slice(0, 10)
+    });
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setDraft(blank);
+    setError("");
   }
 
   // Receipts are voided, never deleted: the number stays on record.
@@ -904,7 +937,7 @@ function Payments({ student, onSaved, disabled }) {
                     const struck = voided ? { textDecoration: "line-through", color: "#94a3b8" } : undefined;
 
                     return (
-                      <tr key={payment.id}>
+                      <tr key={payment.id} style={editing === payment.id ? { backgroundColor: "#fef9c3" } : undefined}>
                         <td style={{ ...cell, ...struck }} dir="ltr">{payment.receiptNo || "—"}</td>
                         <td style={{ ...cell, ...struck }}>{formatDate(payment.paymentDate)}</td>
                         <td style={{ ...cell, ...struck }}>{PAYMENT_TYPES[payment.paymentType] || "قسط"}</td>
@@ -929,6 +962,17 @@ function Payments({ student, onSaved, disabled }) {
                           >
                             طباعة
                           </button>
+                          {!voided && (
+                            <button
+                              type="button"
+                              disabled={busy || disabled}
+                              onClick={() => startEdit(payment)}
+                              title="تعديل الوصل (يبقى رقمه)"
+                              style={{ marginInlineEnd: "6px" }}
+                            >
+                              تعديل
+                            </button>
+                          )}
                           {!voided && (
                             <button
                               type="button"
@@ -970,7 +1014,17 @@ function Payments({ student, onSaved, disabled }) {
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
-            {previousDue.length > 0 && (
+            {editing && (
+              <input
+                type="date"
+                aria-label="تاريخ الوصل"
+                required
+                value={draft.paymentDate}
+                onChange={(e) => setDraft((d) => ({ ...d, paymentDate: e.target.value }))}
+                style={control}
+              />
+            )}
+            {!editing && previousDue.length > 0 && (
               <select
                 aria-label="عن السنة الدراسية"
                 value={draft.enrollmentId}
@@ -1002,8 +1056,13 @@ function Payments({ student, onSaved, disabled }) {
               style={{ ...control, flex: "1 1 200px" }}
             />
             <button type="submit" disabled={busy || disabled}>
-              {busy ? "جارٍ الحفظ..." : "+ إضافة دفعة"}
+              {busy ? "جارٍ الحفظ..." : editing ? "حفظ التعديل" : "+ إضافة دفعة"}
             </button>
+            {editing && (
+              <button type="button" onClick={cancelEdit} disabled={busy}>
+                إلغاء التعديل
+              </button>
+            )}
           </form>
         </>
       )}

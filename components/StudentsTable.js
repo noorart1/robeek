@@ -97,14 +97,11 @@ const blankStudent = {
 
 const NEW = "new";
 
-// term "summer": الدورة الصيفية — the children enrolled in the active
-// summer course, with its section, fee and payments in place of the
-// school year's (formatStudent's `summer`). Otherwise the school year,
-// without the children who only come for the summer. The year is the one
-// chosen in the header (lib/year-view.js): the server formats every child
-// for it, so `enrollment` is that year's.
-export default function StudentsTable({ initialClassId = "", initialReview = false, term = "" }) {
-  const summerView = term === "summer";
+// The school year, without the children who only come for the summer, or
+// a summer course on its own: the year chosen in the header
+// (lib/year-view.js). The server formats every child for it, so
+// `enrollment` is that year's.
+export default function StudentsTable({ initialClassId = "", initialReview = false }) {
   const [students, setStudents] = useState([]);
   const [allOptions, setOptions] = useState({ classes: [], summerClasses: [], lines: [] });
   const [loading, setLoading] = useState(true);
@@ -271,14 +268,10 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
     setLastSync(new Date());
   }
 
-  const options = summerView
-    ? { ...allOptions, classes: allOptions.summerClasses ?? [], academicYear: allOptions.summerYear }
-    : allOptions;
+  const options = allOptions;
   // An earlier year: its children. The running year: its children, and
   // those not enrolled anywhere yet (not those only here in earlier years).
-  const shown = summerView
-    ? students.filter((s) => s.summer).map((s) => ({ ...s, ...s.summer }))
-    : allOptions.isActiveYear === false
+  const shown = allOptions.isActiveYear === false
       ? students.filter((s) => s.enrollment)
       : students.filter((s) => s.enrollment?.academicYear?.isActive || (!s.summer && !s.past?.length));
 
@@ -461,8 +454,8 @@ export default function StudentsTable({ initialClassId = "", initialReview = fal
       {allOptions.summerYear && (
         <nav style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
           {[
-            ["/dashboard/students", yearLabel(allOptions.academicYear), !summerView, "#2563eb"],
-            ["/dashboard/students?term=summer", yearLabel(allOptions.summerYear), summerView, "#ea580c"]
+            ["/dashboard/students", yearLabel(allOptions.academicYear), true, "#2563eb"],
+            ["/dashboard/students?term=summer", yearLabel(allOptions.summerYear), false, "#ea580c"]
           ].map(([href, label, current, color]) => (
             <a
               key={href}

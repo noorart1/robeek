@@ -57,11 +57,8 @@ export default function AttendanceBoard() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
 
-        // The summer course's sections too, marked as such.
-        const all = [
-          ...data.classes,
-          ...(data.summerClasses ?? []).map((c) => ({ ...c, name: `${c.name} (الصيفية)` }))
-        ];
+        // The chosen year's sections (a teacher's include the summer's).
+        const all = data.classes;
         setClasses(all);
         setClassesLoaded(true);
         const stored = readStoredClass();

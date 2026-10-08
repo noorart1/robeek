@@ -6,6 +6,7 @@ import LogoutButton from "./LogoutButton";
 import { ROLE_HOME } from "../lib/auth";
 import { FINANCE_TABS, canFinance } from "../lib/finance-access";
 import YearPicker, { BackToActiveYear } from "./YearPicker";
+import { yearLabel } from "../lib/labels";
 
 // Teachers see attendance only; a معاون everything but users and backups,
 // المالية only with a tab of it, and الكادر only with رواتب الموظفين
@@ -23,17 +24,17 @@ const links = [
 ];
 
 // Admins and a معاون choose the school year every page shows
-// (lib/year-view.js); an earlier one is announced under the header,
-// editable like the current.
+// (lib/year-view.js), or a summer course on its own; anything but the
+// active year is announced under the header, editable like the current.
 export default async function AppHeader({ user, active }) {
   const office = user.role === "ADMIN" || user.role === "DEPUTY";
   const [view, years] = office
     ? await Promise.all([
         yearView(),
-        prisma.academicYear.findMany({ where: { kind: "REGULAR" }, select: { id: true, name: true, isActive: true }, orderBy: { name: "desc" } })
+        prisma.academicYear.findMany({ select: { id: true, name: true, kind: true, isActive: true }, orderBy: { id: "desc" } })
       ])
     : [null, []];
-  const activeId = years.find((y) => y.isActive)?.id ?? null;
+  const activeId = years.find((y) => y.isActive && y.kind === "REGULAR")?.id ?? null;
 
   return (
     <>
@@ -126,7 +127,9 @@ export default async function AppHeader({ user, active }) {
           borderBottom: "1px solid #fcd34d"
         }}
       >
-        <strong>تعرض الآن السنة الدراسية {view.year.name}، وليست السنة الحالية.</strong>
+        <strong>
+          {view.isSummer ? `تعرض الآن ${yearLabel(view.year.name)} وحدها.` : `تعرض الآن السنة الدراسية ${view.year.name}، وليست السنة الحالية.`}
+        </strong>
         <span>التعديلات تُحفظ في هذه السنة.</span>
         <BackToActiveYear />
       </div>

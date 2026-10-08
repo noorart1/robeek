@@ -320,6 +320,7 @@ test("school years: the next one, and the months each covers", async () => {
   assert.equal(nextYearName("السنة الأولى"), null);
   // A summer belongs to the year that just ended.
   assert.deepEqual(yearMonths("2025-2026"), { from: "2025-10", to: "2026-09" });
+  assert.deepEqual(yearMonths("صيف 2026"), { from: "2026-05", to: "2026-08" });
   assert.equal(yearMonths(undefined), null);
 });
 
@@ -472,4 +473,35 @@ test("a box movement may not take more than its box holds", async () => {
   assert.equal(await checkBoxMovement(client2, range, null, { ...draw, id: 2 }), null);
   // Other categories are not movements.
   assert.equal(await checkBoxMovement(client([handover]), range, { ...draw, category: "GENERAL" }), null);
+});
+
+test("the box counts a child's payment under its enrollment's year, not the receipt's date", async () => {
+  const { boxBalances, viewRange } = await import("../lib/finance.js");
+  // Payments: 1000 for the school year in October; 300 for «صيف 2027»
+  // paid early, in October 2026, and 200 in June 2027.
+  const payments = [
+    { amount: 1000, paymentType: "TUITION", paymentMethod: "CASH", paymentDate: "2026-10-02", kind: "REGULAR", yearId: 1 },
+    { amount: 300, paymentType: "TUITION", paymentMethod: "CASH", paymentDate: "2026-10-03", kind: "SUMMER", yearId: 2 },
+    { amount: 200, paymentType: "TUITION", paymentMethod: "CARD", paymentDate: "2027-06-10", kind: "SUMMER", yearId: 2 }
+  ];
+  const client = {
+    payment: {
+      findMany: async ({ where }) => payments.filter((p) =>
+        (!where.Enrollment?.academicYearId || p.yearId === where.Enrollment.academicYearId) &&
+        (!where.Enrollment?.AcademicYear || p.kind === where.Enrollment.AcademicYear.kind))
+    },
+    salaryPayment: { findMany: async () => [] },
+    expense: { findMany: async () => [{ date: new Date("2026-10-05"), category: "GENERAL", item: "قرطاسية", amount: 50 }] }
+  };
+
+  const school = await boxBalances(client, viewRange({ year: { id: 1, name: "2026-2027" }, isActive: false }));
+  assert.equal(school.totalIncome, 1000);
+  assert.equal(school.centreBox, 950);
+
+  const summer = await boxBalances(client, viewRange({ year: { id: 2, name: "صيف 2027" }, isActive: false, isSummer: true }));
+  assert.equal(summer.totalIncome, 500);
+  // October's stationery belongs to the school year: not spent from the summer.
+  assert.equal(summer.spent, 0);
+  assert.equal(summer.centreBox, 500);
+  assert.deepEqual(summer.months.map((m) => [m.month, m.income]), [["2027-06", 200], ["2026-10", 300]]);
 });

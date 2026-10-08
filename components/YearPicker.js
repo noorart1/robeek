@@ -1,6 +1,9 @@
 "use client";
 
-// The school year every page shows (lib/year-view.js). Both controls go
+import { yearLabel } from "../lib/labels";
+
+// The school year every page shows (lib/year-view.js), or a summer
+// course on its own. Both controls go
 // through /dashboard/year, which sets or clears the cookie and comes back
 // to this page with a full load, so the tables fetch the chosen year.
 const goTo = (id) => {
@@ -19,7 +22,7 @@ export default function YearPicker({ years, selectedId, activeId }) {
       >
         {years.map((y) => (
           <option key={y.id} value={y.id}>
-            {y.name}{y.id === activeId ? " (الحالية)" : ""}
+            {y.kind === "SUMMER" ? yearLabel(y.name) : y.name}{y.id === activeId ? " (الحالية)" : ""}
           </option>
         ))}
       </select>

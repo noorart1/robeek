@@ -1,10 +1,8 @@
 
 import prisma from "../../../../../lib/prisma";
 import { requireOffice } from "../../../../../lib/auth";
-import { parseAmount } from "../../../../../lib/digits";
-import { PAYMENT_METHODS, PAYMENT_TYPES } from "../../../../../lib/labels";
 import { loadStudent } from "../../../../../lib/student-data";
-import { REFUND_TYPES, paidTotals } from "../../../../../lib/finance";
+import { REFUND_TYPES, checkPayment, paidTotals } from "../../../../../lib/finance";
 import { nextSequence } from "../../../../../lib/sequence";
 
 export const runtime = "nodejs";
@@ -51,28 +49,13 @@ export async function POST(request, { params }) {
       return errorResponse("البيانات المرسلة غير صالحة.", 400);
     }
 
-    const amount = parseAmount(body?.amount);
+    const checked = checkPayment(body);
 
-    if (!amount) {
-      return errorResponse("يرجى إدخال مبلغ الدفعة بالأرقام.", 400, { field: "amount" });
+    if (checked.error) {
+      return errorResponse(checked.error, 400, { field: checked.field });
     }
 
-    const paymentType = body.paymentType || "TUITION";
-
-    if (!(paymentType in PAYMENT_TYPES)) {
-      return errorResponse("نوع الدفعة غير صالح.", 400, { field: "paymentType" });
-    }
-
-    const paymentMethod = body.paymentMethod || "CASH";
-
-    if (!(paymentMethod in PAYMENT_METHODS)) {
-      return errorResponse("نوع الدفع غير صالح.", 400, { field: "paymentMethod" });
-    }
-
-    const description =
-      typeof body.description === "string" && body.description.trim()
-        ? body.description.trim().slice(0, 500)
-        : null;
+    const { amount, paymentType, paymentMethod, description } = checked.data;
 
     // enrollmentId: the enrollment paid for — the summer course's, or an
     // earlier year's («عن» that year). The dialog always sends it. Without

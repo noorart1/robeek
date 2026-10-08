@@ -28,8 +28,10 @@ export default async function StudentReceiptsPage({ params, searchParams }) {
     ? await loadStudent(studentId)
     : null;
 
-  if (!loaded || (term === "summer" && !loaded.summer)) notFound();
-  const student = term === "summer" ? { ...loaded, ...loaded.summer } : loaded;
+  // A summer course shown on its own is already the child's enrollment.
+  const ownSummer = loaded?.enrollment?.academicYear?.kind === "SUMMER";
+  if (!loaded || (term === "summer" && !loaded.summer && !ownSummer)) notFound();
+  const student = term === "summer" && !ownSummer ? { ...loaded, ...loaded.summer } : loaded;
 
   const payments = (student.enrollment?.payments || []).filter((p) => !p.voidedAt);
   const cls = student.enrollment?.class;

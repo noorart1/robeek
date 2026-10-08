@@ -8,8 +8,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Choices for the section and transport-line pickers: the school year's
-// sections, and those of its summer course (summerClasses): the year
-// chosen in the header (lib/year-view.js); a teacher's always the active.
+// sections, and those of its summer course (summerClasses, for registering
+// a child in it): the year chosen in the header (lib/year-view.js), or a
+// summer course on its own. A teacher has no picker: her sections of the
+// active year and of the active summer course, all in classes.
 
 export async function GET() {
   try {
@@ -48,8 +50,16 @@ export async function GET() {
       })
     ]);
 
+    if (teacher) {
+      classes.push(...summerClasses.map((c) => ({ ...c, name: `${c.name} (الصيفية)` })));
+      summerClasses.length = 0;
+    }
+
     return Response.json(
-      { academicYear: year?.name ?? null, isActiveYear: isActive, classes, summerYear: summer?.name ?? null, summerClasses, lines },
+      {
+        academicYear: year?.name ?? null, isActiveYear: isActive, classes,
+        summerYear: summer?.name ?? null, summerYearId: summer?.id ?? null, summerClasses, lines
+      },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
